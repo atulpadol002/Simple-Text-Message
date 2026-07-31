@@ -38,6 +38,15 @@ class MessageRepository(
         )
     }
 
+    fun getThreadIdForMessage(
+        messageId: Long
+    ): Long {
+
+        return dataSource.getThreadIdForMessage(
+            messageId
+        )
+    }
+
     fun sendSms(
         phoneNumber: String,
         message: String,

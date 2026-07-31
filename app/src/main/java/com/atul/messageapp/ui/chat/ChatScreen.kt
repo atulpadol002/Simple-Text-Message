@@ -198,9 +198,7 @@ fun ChatScreen(
 
         SmsEventBus.events.collectLatest {
 
-            chatViewModel.refreshMessages(
-                conversationId
-            )
+            chatViewModel.refreshMessages()
         }
     }
 

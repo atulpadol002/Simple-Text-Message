@@ -125,6 +125,43 @@ class MessageDataSource(
         }
     }
 
+    fun getThreadIdForMessage(
+        messageId: Long
+    ): Long {
+
+        return try {
+
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms.THREAD_ID),
+                "${Telephony.Sms._ID}=?",
+                arrayOf(messageId.toString()),
+                null
+            )?.use { cursor ->
+
+                if (cursor.moveToFirst()) {
+                    cursor.getLong(
+                        cursor.getColumnIndexOrThrow(
+                            Telephony.Sms.THREAD_ID
+                        )
+                    )
+                } else {
+                    0L
+                }
+            } ?: 0L
+
+        } catch (exception: SecurityException) {
+
+            exception.printStackTrace()
+            0L
+
+        } catch (exception: Exception) {
+
+            exception.printStackTrace()
+            0L
+        }
+    }
+
     fun markMessageSending(
         messageId: Long
     ): Boolean {

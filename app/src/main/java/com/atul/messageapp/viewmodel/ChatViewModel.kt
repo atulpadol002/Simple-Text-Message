@@ -84,6 +84,9 @@ class ChatViewModel(
     private var refreshJob:
             Job? = null
 
+    private var pendingThreadIdMessageId:
+            Long? = null
+
     private val smsContentObserver =
         object : ContentObserver(
             Handler(
@@ -142,8 +145,14 @@ class ChatViewModel(
         phoneNumber: String
     ) {
 
-        currentConversationId =
-            conversationId
+        if (
+            conversationId > 0L ||
+            currentConversationId == null ||
+            currentConversationId == 0L
+        ) {
+            currentConversationId =
+                conversationId
+        }
 
         currentPhoneNumber =
             phoneNumber
@@ -153,6 +162,10 @@ class ChatViewModel(
         loadScheduledMessages(
             phoneNumber
         )
+
+        if (conversationId <= 0L) {
+            return
+        }
 
         viewModelScope.launch {
 
@@ -170,17 +183,25 @@ class ChatViewModel(
                     )
                 }
 
-            _messages.value =
-                result
+            if (
+                currentConversationId ==
+                conversationId
+            ) {
+                _messages.value =
+                    result
+            }
         }
     }
 
-    fun refreshMessages(
-        conversationId: Long
-    ) {
+    fun refreshMessages() {
 
-        currentConversationId =
-            conversationId
+        val conversationId =
+            currentConversationId
+                ?: return
+
+        if (conversationId <= 0L) {
+            return
+        }
 
         loadStarredMessageIds()
 
@@ -208,8 +229,13 @@ class ChatViewModel(
                     )
                 }
 
-            _messages.value =
-                result
+            if (
+                currentConversationId ==
+                conversationId
+            ) {
+                _messages.value =
+                    result
+            }
         }
     }
 
@@ -550,6 +576,10 @@ class ChatViewModel(
                         )
                 }
 
+            resolveCurrentConversationId(
+                insertedMessageId
+            )
+
             val handedOff =
                 repository.sendSms(
                     phoneNumber =
@@ -585,14 +615,7 @@ class ChatViewModel(
                             }
                         }
 
-                        currentConversationId
-                            ?.let {
-                                    conversationId ->
-
-                                refreshMessages(
-                                    conversationId
-                                )
-                            }
+                        refreshMessages()
                     }
                 )
 
@@ -614,14 +637,7 @@ class ChatViewModel(
                     }
                 }
 
-                currentConversationId
-                    ?.let {
-                            conversationId ->
-
-                        refreshMessages(
-                            conversationId
-                        )
-                    }
+                refreshMessages()
             }
         }
 
@@ -686,8 +702,14 @@ class ChatViewModel(
         message: String
     ) {
 
-        currentConversationId =
-            conversationId
+        if (
+            conversationId > 0L ||
+            currentConversationId == null ||
+            currentConversationId == 0L
+        ) {
+            currentConversationId =
+                conversationId
+        }
 
         currentPhoneNumber =
             phoneNumber
@@ -708,6 +730,10 @@ class ChatViewModel(
                         )
                 }
 
+            resolveCurrentConversationId(
+                insertedId
+            )
+
             val messageId =
                 if (
                     insertedId != -1L
@@ -725,7 +751,8 @@ class ChatViewModel(
                     id =
                         messageId,
                     conversationId =
-                        conversationId,
+                        currentConversationId
+                            ?: conversationId,
                     phoneNumber =
                         phoneNumber,
                     body =
@@ -849,6 +876,10 @@ class ChatViewModel(
 
             } else {
 
+                val conversationId =
+                    currentConversationId
+                        ?: return@launch
+
                 val refreshedMessages =
                     withContext(
                         Dispatchers.IO
@@ -856,12 +887,17 @@ class ChatViewModel(
 
                         repository.getMessages(
                             conversationId =
-                                message.conversationId
+                                conversationId
                         )
                     }
 
-                _messages.value =
-                    refreshedMessages
+                if (
+                    currentConversationId ==
+                    conversationId
+                ) {
+                    _messages.value =
+                        refreshedMessages
+                }
             }
         }
     }
@@ -960,10 +996,6 @@ class ChatViewModel(
 
     private fun scheduleProviderRefresh() {
 
-        val conversationId =
-            currentConversationId
-                ?: return
-
         refreshJob?.cancel()
 
         refreshJob =
@@ -972,6 +1004,16 @@ class ChatViewModel(
                 delay(
                     250L
                 )
+
+                retryPendingThreadIdResolution()
+
+                val conversationId =
+                    currentConversationId
+                        ?: return@launch
+
+                if (conversationId <= 0L) {
+                    return@launch
+                }
 
                 val refreshedMessages =
                     withContext(
@@ -983,8 +1025,13 @@ class ChatViewModel(
                         )
                     }
 
-                _messages.value =
-                    refreshedMessages
+                if (
+                    currentConversationId ==
+                    conversationId
+                ) {
+                    _messages.value =
+                        refreshedMessages
+                }
 
                 currentPhoneNumber
                     ?.let {
@@ -995,6 +1042,77 @@ class ChatViewModel(
                         )
                     }
             }
+    }
+
+    private suspend fun resolveCurrentConversationId(
+        insertedMessageId: Long
+    ) {
+
+        if (
+            insertedMessageId <= 0L ||
+            currentConversationId != 0L
+        ) {
+            return
+        }
+
+        val resolvedThreadId =
+            withContext(
+                Dispatchers.IO
+            ) {
+                repository.getThreadIdForMessage(
+                    insertedMessageId
+                )
+            }
+
+        if (
+            currentConversationId == 0L &&
+            resolvedThreadId > 0L
+        ) {
+            currentConversationId =
+                resolvedThreadId
+
+            pendingThreadIdMessageId =
+                null
+
+        } else if (
+            currentConversationId == 0L
+        ) {
+            pendingThreadIdMessageId =
+                insertedMessageId
+        }
+    }
+
+    private suspend fun retryPendingThreadIdResolution() {
+
+        val pendingMessageId =
+            pendingThreadIdMessageId
+                ?: return
+
+        if (currentConversationId != 0L) {
+            pendingThreadIdMessageId =
+                null
+            return
+        }
+
+        val resolvedThreadId =
+            withContext(
+                Dispatchers.IO
+            ) {
+                repository.getThreadIdForMessage(
+                    pendingMessageId
+                )
+            }
+
+        if (
+            currentConversationId == 0L &&
+            resolvedThreadId > 0L
+        ) {
+            currentConversationId =
+                resolvedThreadId
+
+            pendingThreadIdMessageId =
+                null
+        }
     }
 
     private fun updateMessageStatus(
