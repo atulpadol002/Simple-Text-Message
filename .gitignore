@@ -1,6 +1,21 @@
+# Gradle
 .gradle/
-.idea/
 build/
-app/build/
-local.properties
+**/build/
+
+# Android Studio
+.idea/
 *.iml
+
+# Local config
+local.properties
+
+# Kotlin
+.kotlin/
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# macOS
+.DS_Store
