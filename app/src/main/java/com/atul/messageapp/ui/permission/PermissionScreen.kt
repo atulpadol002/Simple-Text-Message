@@ -1,8 +1,5 @@
 package com.atul.messageapp.ui.permission
 
-import android.app.role.RoleManager
-import android.content.Context
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.atul.messageapp.sms.DefaultSmsManager
 
 @Composable
 fun PermissionScreen(
@@ -22,12 +20,15 @@ fun PermissionScreen(
 
     val context = LocalContext.current
 
+    val defaultSmsManager =
+        DefaultSmsManager(context)
+
     val roleLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartActivityForResult()
         ) {
 
-            if (isDefaultSmsApp(context)) {
+            if (defaultSmsManager.isDefaultSmsApp()) {
                 onPermissionGranted()
             }
         }
@@ -43,51 +44,19 @@ fun PermissionScreen(
         Button(
             onClick = {
 
-                if (isDefaultSmsApp(context)) {
+                if (defaultSmsManager.isDefaultSmsApp()) {
 
                     onPermissionGranted()
 
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                } else {
 
-                    val roleManager =
-                        context.getSystemService(RoleManager::class.java)
-
-                    if (
-                        roleManager.isRoleAvailable(RoleManager.ROLE_SMS)
-                    ) {
-
-                        val intent =
-                            roleManager.createRequestRoleIntent(
-                                RoleManager.ROLE_SMS
-                            )
-
-                        roleLauncher.launch(intent)
-                    }
+                    defaultSmsManager
+                        .createRequestRoleIntent()
+                        ?.let(roleLauncher::launch)
                 }
             }
         ) {
             Text("Set as Default SMS App")
         }
-    }
-}
-
-private fun isDefaultSmsApp(
-    context: Context
-): Boolean {
-
-    return if (
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-    ) {
-
-        val roleManager =
-            context.getSystemService(RoleManager::class.java)
-
-        roleManager.isRoleHeld(RoleManager.ROLE_SMS)
-
-    } else {
-
-        android.provider.Telephony.Sms
-            .getDefaultSmsPackage(context) ==
-                context.packageName
     }
 }
