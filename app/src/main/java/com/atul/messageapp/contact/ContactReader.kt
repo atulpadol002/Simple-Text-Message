@@ -1,7 +1,10 @@
 package com.atul.messageapp.contact
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.provider.ContactsContract
+import androidx.core.content.ContextCompat
 import com.atul.messageapp.data.model.Contact
 
 class ContactReader(
@@ -9,6 +12,16 @@ class ContactReader(
 ) {
 
     fun getContacts(): List<Contact> {
+
+        if (
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return emptyList()
+        }
+
         val contacts = ArrayList<Contact>()
 
         val projection = arrayOf(
@@ -16,49 +29,56 @@ class ContactReader(
             ContactsContract.CommonDataKinds.Phone.NUMBER
         )
 
-        val cursor = context.contentResolver.query(
-            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            projection,
-            null,
-            null,
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-        )
+        return try {
 
-        cursor?.use {
-
-            val nameIndex = it.getColumnIndexOrThrow(
-                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+            val cursor = context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                projection,
+                null,
+                null,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
             )
 
-            val phoneIndex = it.getColumnIndexOrThrow(
-                ContactsContract.CommonDataKinds.Phone.NUMBER
-            )
+            cursor?.use {
 
-            val numbers = HashSet<String>()
+                val nameIndex = it.getColumnIndexOrThrow(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                )
 
-            while (it.moveToNext()) {
+                val phoneIndex = it.getColumnIndexOrThrow(
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                )
 
-                val phone = it.getString(phoneIndex)
-                    ?.replace(" ", "")
-                    ?.replace("-", "")
-                    ?: ""
+                val numbers = HashSet<String>()
 
-                if (numbers.add(phone)) {
+                while (it.moveToNext()) {
 
-                    contacts.add(
-                        Contact(
-                            name = it.getString(nameIndex) ?: "Unknown",
-                            phoneNumber = phone
+                    val phone = it.getString(phoneIndex)
+                        ?.replace(" ", "")
+                        ?.replace("-", "")
+                        ?: ""
+
+                    if (numbers.add(phone)) {
+
+                        contacts.add(
+                            Contact(
+                                name = it.getString(nameIndex) ?: "Unknown",
+                                phoneNumber = phone
+                            )
                         )
-                    )
+
+                    }
 
                 }
 
             }
 
-        }
+            contacts
 
-        return contacts
+        } catch (exception: SecurityException) {
+
+            emptyList()
+        }
 
     }
 

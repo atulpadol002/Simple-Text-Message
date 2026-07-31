@@ -1,5 +1,7 @@
 package com.atul.messageapp.ui.permission
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import com.atul.messageapp.sms.DefaultSmsManager
 
 @Composable
@@ -23,13 +26,37 @@ fun PermissionScreen(
     val defaultSmsManager =
         DefaultSmsManager(context)
 
+    val contactsPermissionLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) {
+            onPermissionGranted()
+        }
+
+    fun continueAfterDefaultRoleGranted() {
+
+        val contactsPermissionGranted =
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED
+
+        if (contactsPermissionGranted) {
+            onPermissionGranted()
+        } else {
+            contactsPermissionLauncher.launch(
+                Manifest.permission.READ_CONTACTS
+            )
+        }
+    }
+
     val roleLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartActivityForResult()
         ) {
 
             if (defaultSmsManager.isDefaultSmsApp()) {
-                onPermissionGranted()
+                continueAfterDefaultRoleGranted()
             }
         }
 
@@ -46,7 +73,7 @@ fun PermissionScreen(
 
                 if (defaultSmsManager.isDefaultSmsApp()) {
 
-                    onPermissionGranted()
+                    continueAfterDefaultRoleGranted()
 
                 } else {
 
