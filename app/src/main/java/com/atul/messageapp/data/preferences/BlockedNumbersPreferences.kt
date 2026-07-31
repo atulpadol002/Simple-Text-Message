@@ -25,17 +25,13 @@ class BlockedNumbersPreferences(
         phoneNumber: String
     ): Boolean {
 
-        val normalizedNumber =
-            normalizePhoneNumber(
-                phoneNumber
-            )
-
         return getBlockedNumbers()
             .any { blockedNumber ->
 
-                normalizePhoneNumber(
-                    blockedNumber
-                ) == normalizedNumber
+                matchesBlockedValue(
+                    blockedNumber,
+                    phoneNumber
+                )
             }
     }
 
@@ -58,12 +54,10 @@ class BlockedNumbersPreferences(
             currentNumbers.any {
                     blockedNumber ->
 
-                normalizePhoneNumber(
-                    blockedNumber
-                ) ==
-                        normalizePhoneNumber(
-                            cleanedNumber
-                        )
+                matchesBlockedValue(
+                    blockedNumber,
+                    cleanedNumber
+                )
             }
 
         if (alreadyBlocked) {
@@ -87,11 +81,6 @@ class BlockedNumbersPreferences(
         phoneNumber: String
     ): Boolean {
 
-        val normalizedNumber =
-            normalizePhoneNumber(
-                phoneNumber
-            )
-
         val currentNumbers =
             getBlockedNumbers()
                 .toMutableSet()
@@ -100,9 +89,10 @@ class BlockedNumbersPreferences(
             currentNumbers.removeAll {
                     blockedNumber ->
 
-                normalizePhoneNumber(
-                    blockedNumber
-                ) == normalizedNumber
+                matchesBlockedValue(
+                    blockedNumber,
+                    phoneNumber
+                )
             }
 
         if (!removed) {
@@ -129,6 +119,47 @@ class BlockedNumbersPreferences(
         }.takeLast(
             PHONE_NUMBER_MATCH_LENGTH
         )
+    }
+
+    private fun matchesBlockedValue(
+        blockedValue: String,
+        candidateValue: String
+    ): Boolean {
+
+        val blockedIsSenderId =
+            blockedValue.any {
+                character ->
+
+                character.isLetter()
+            }
+
+        val candidateIsSenderId =
+            candidateValue.any {
+                character ->
+
+                character.isLetter()
+            }
+
+        return if (
+            blockedIsSenderId ||
+            candidateIsSenderId
+        ) {
+
+            blockedIsSenderId &&
+                    candidateIsSenderId &&
+                    blockedValue.trim().equals(
+                        candidateValue.trim(),
+                        ignoreCase = true
+                    )
+
+        } else {
+
+            normalizePhoneNumber(
+                blockedValue
+            ) == normalizePhoneNumber(
+                candidateValue
+            )
+        }
     }
 
     companion object {
