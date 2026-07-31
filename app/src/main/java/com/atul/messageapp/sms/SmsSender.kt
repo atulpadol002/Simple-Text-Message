@@ -141,7 +141,7 @@ class SmsSender(
                 appContext,
                 receiver,
                 IntentFilter(sentAction),
-                ContextCompat.RECEIVER_EXPORTED
+                ContextCompat.RECEIVER_NOT_EXPORTED
             )
 
             val sentPendingIntents =
