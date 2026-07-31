@@ -1,0 +1,249 @@
+package com.atul.messageapp.data.datasource
+
+import android.content.ContentValues
+import android.content.Context
+import android.provider.Telephony
+import com.atul.messageapp.data.model.Message
+import com.atul.messageapp.data.model.MessageStatus
+
+class MessageDataSource(
+    private val context: Context
+) {
+
+    fun getMessages(conversationId: Long): List<Message> {
+
+        val messages = mutableListOf<Message>()
+
+        val cursor = context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            null,
+            "${Telephony.Sms.THREAD_ID}=?",
+            arrayOf(conversationId.toString()),
+            "${Telephony.Sms.DATE} ASC"
+        )
+
+        cursor?.use {
+
+            while (it.moveToNext()) {
+
+                val id = it.getLong(
+                    it.getColumnIndexOrThrow(Telephony.Sms._ID)
+                )
+
+                val body = it.getString(
+                    it.getColumnIndexOrThrow(Telephony.Sms.BODY)
+                ) ?: ""
+
+                val address = it.getString(
+                    it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+                ) ?: ""
+
+                val date = it.getLong(
+                    it.getColumnIndexOrThrow(Telephony.Sms.DATE)
+                )
+
+                val type = it.getInt(
+                    it.getColumnIndexOrThrow(Telephony.Sms.TYPE)
+                )
+
+                val read = it.getInt(
+                    it.getColumnIndexOrThrow(Telephony.Sms.READ)
+                ) == 1
+
+                val status = when (type) {
+
+                    Telephony.Sms.MESSAGE_TYPE_OUTBOX,
+                    Telephony.Sms.MESSAGE_TYPE_QUEUED ->
+                        MessageStatus.SENDING
+
+                    Telephony.Sms.MESSAGE_TYPE_SENT ->
+                        MessageStatus.SENT
+
+                    Telephony.Sms.MESSAGE_TYPE_FAILED ->
+                        MessageStatus.FAILED
+
+                    else ->
+                        MessageStatus.NONE
+                }
+
+                messages.add(
+                    Message(
+                        id = id,
+                        conversationId = conversationId,
+                        phoneNumber = address,
+                        body = body,
+                        timestamp = date,
+                        isIncoming =
+                            type == Telephony.Sms.MESSAGE_TYPE_INBOX,
+                        isRead = read,
+                        status = status
+                    )
+                )
+            }
+        }
+
+        return messages
+    }
+
+    fun insertOutgoingMessage(
+        phoneNumber: String,
+        body: String
+    ): Long {
+
+        return try {
+
+            val values = ContentValues().apply {
+                put(Telephony.Sms.ADDRESS, phoneNumber)
+                put(Telephony.Sms.BODY, body)
+                put(Telephony.Sms.DATE, System.currentTimeMillis())
+                put(Telephony.Sms.READ, 1)
+                put(Telephony.Sms.SEEN, 1)
+                put(
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.MESSAGE_TYPE_OUTBOX
+                )
+            }
+
+            val uri = context.contentResolver.insert(
+                Telephony.Sms.CONTENT_URI,
+                values
+            )
+
+            uri?.lastPathSegment
+                ?.toLongOrNull()
+                ?: -1L
+
+        } catch (exception: SecurityException) {
+
+            exception.printStackTrace()
+            -1L
+
+        } catch (exception: Exception) {
+
+            exception.printStackTrace()
+            -1L
+        }
+    }
+
+    fun markMessageSending(
+        messageId: Long
+    ): Boolean {
+
+        return updateMessageType(
+            messageId = messageId,
+            type = Telephony.Sms.MESSAGE_TYPE_OUTBOX
+        )
+    }
+
+    fun markMessageSent(
+        messageId: Long
+    ): Boolean {
+
+        return updateMessageType(
+            messageId = messageId,
+            type = Telephony.Sms.MESSAGE_TYPE_SENT
+        )
+    }
+
+    fun markMessageFailed(
+        messageId: Long
+    ): Boolean {
+
+        return updateMessageType(
+            messageId = messageId,
+            type = Telephony.Sms.MESSAGE_TYPE_FAILED
+        )
+    }
+
+    fun markThreadAsRead(
+        conversationId: Long
+    ): Boolean {
+
+        return try {
+
+            val values = ContentValues().apply {
+                put(Telephony.Sms.READ, 1)
+                put(Telephony.Sms.SEEN, 1)
+            }
+
+            val rowsUpdated =
+                context.contentResolver.update(
+                    Telephony.Sms.CONTENT_URI,
+                    values,
+                    "${Telephony.Sms.THREAD_ID}=? AND ${Telephony.Sms.READ}=0",
+                    arrayOf(conversationId.toString())
+                )
+
+            rowsUpdated >= 0
+
+        } catch (exception: SecurityException) {
+
+            exception.printStackTrace()
+            false
+
+        } catch (exception: Exception) {
+
+            exception.printStackTrace()
+            false
+        }
+    }
+    fun deleteMessage(
+        messageId: Long
+    ): Boolean {
+
+        return try {
+
+            val deletedRows =
+                context.contentResolver.delete(
+                    Telephony.Sms.CONTENT_URI,
+                    "${Telephony.Sms._ID}=?",
+                    arrayOf(messageId.toString())
+                )
+
+            deletedRows > 0
+
+        } catch (exception: SecurityException) {
+
+            exception.printStackTrace()
+            false
+
+        } catch (exception: Exception) {
+
+            exception.printStackTrace()
+            false
+        }
+    }
+
+    private fun updateMessageType(
+        messageId: Long,
+        type: Int
+    ): Boolean {
+
+        return try {
+
+            val values = ContentValues().apply {
+                put(Telephony.Sms.TYPE, type)
+            }
+
+            val rowsUpdated =
+                context.contentResolver.update(
+                    Telephony.Sms.CONTENT_URI,
+                    values,
+                    "${Telephony.Sms._ID}=?",
+                    arrayOf(messageId.toString())
+                )
+
+            rowsUpdated > 0
+
+        } catch (exception: SecurityException) {
+
+            exception.printStackTrace()
+            false
+
+        } catch (exception: Exception) {
+
+            exception.printStackTrace()
+            false
+        }
+    }
+}

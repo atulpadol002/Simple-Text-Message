@@ -1,0 +1,1060 @@
+package com.atul.messageapp.viewmodel
+
+import android.app.Application
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.Telephony
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.atul.messageapp.data.model.Message
+import com.atul.messageapp.data.model.MessageStatus
+import com.atul.messageapp.data.model.ScheduledSms
+import com.atul.messageapp.data.preferences.ScheduledSmsPreferences
+import com.atul.messageapp.data.preferences.StarredMessagesPreferences
+import com.atul.messageapp.data.repository.MessageRepository
+import com.atul.messageapp.sms.ScheduledSmsScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+class ChatViewModel(
+    application: Application
+) : AndroidViewModel(application) {
+
+    private val appContext =
+        application.applicationContext
+
+    private val repository =
+        MessageRepository(appContext)
+
+    private val starredMessagesPreferences =
+        StarredMessagesPreferences(
+            appContext
+        )
+
+    private val scheduledSmsPreferences =
+        ScheduledSmsPreferences(
+            appContext
+        )
+
+    private val scheduledSmsScheduler =
+        ScheduledSmsScheduler(
+            appContext
+        )
+
+    private val _messages =
+        MutableStateFlow<List<Message>>(
+            emptyList()
+        )
+
+    val messages: StateFlow<List<Message>> =
+        _messages.asStateFlow()
+
+    private val _starredMessageIds =
+        MutableStateFlow<Set<Long>>(
+            emptySet()
+        )
+
+    val starredMessageIds:
+            StateFlow<Set<Long>> =
+        _starredMessageIds.asStateFlow()
+
+    private val _scheduledMessages =
+        MutableStateFlow<List<ScheduledSms>>(
+            emptyList()
+        )
+
+    val scheduledMessages:
+            StateFlow<List<ScheduledSms>> =
+        _scheduledMessages.asStateFlow()
+
+    private var currentConversationId:
+            Long? = null
+
+    private var currentPhoneNumber:
+            String? = null
+
+    private var refreshJob:
+            Job? = null
+
+    private val smsContentObserver =
+        object : ContentObserver(
+            Handler(
+                Looper.getMainLooper()
+            )
+        ) {
+
+            override fun onChange(
+                selfChange: Boolean
+            ) {
+
+                super.onChange(
+                    selfChange
+                )
+
+                scheduleProviderRefresh()
+            }
+
+            override fun onChange(
+                selfChange: Boolean,
+                uri: Uri?
+            ) {
+
+                super.onChange(
+                    selfChange,
+                    uri
+                )
+
+                scheduleProviderRefresh()
+            }
+        }
+
+    init {
+
+        loadStarredMessageIds()
+
+        try {
+
+            appContext.contentResolver
+                .registerContentObserver(
+                    Telephony.Sms.CONTENT_URI,
+                    true,
+                    smsContentObserver
+                )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            exception.printStackTrace()
+        }
+    }
+
+    fun loadMessages(
+        conversationId: Long,
+        phoneNumber: String
+    ) {
+
+        currentConversationId =
+            conversationId
+
+        currentPhoneNumber =
+            phoneNumber
+
+        loadStarredMessageIds()
+
+        loadScheduledMessages(
+            phoneNumber
+        )
+
+        viewModelScope.launch {
+
+            val result =
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    repository.markThreadAsRead(
+                        conversationId
+                    )
+
+                    repository.getMessages(
+                        conversationId
+                    )
+                }
+
+            _messages.value =
+                result
+        }
+    }
+
+    fun refreshMessages(
+        conversationId: Long
+    ) {
+
+        currentConversationId =
+            conversationId
+
+        loadStarredMessageIds()
+
+        currentPhoneNumber?.let {
+                phoneNumber ->
+
+            loadScheduledMessages(
+                phoneNumber
+            )
+        }
+
+        viewModelScope.launch {
+
+            val result =
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    repository.markThreadAsRead(
+                        conversationId
+                    )
+
+                    repository.getMessages(
+                        conversationId
+                    )
+                }
+
+            _messages.value =
+                result
+        }
+    }
+
+    fun loadScheduledMessages(
+        phoneNumber: String
+    ) {
+
+        currentPhoneNumber =
+            phoneNumber
+
+        _scheduledMessages.value =
+            scheduledSmsPreferences
+                .getScheduledMessagesForNumber(
+                    phoneNumber
+                )
+                .filter {
+                        scheduledSms ->
+
+                    scheduledSms.scheduledTime >
+                            System.currentTimeMillis()
+                }
+                .sortedBy {
+                        scheduledSms ->
+
+                    scheduledSms.scheduledTime
+                }
+    }
+
+    fun scheduleMessage(
+        contactName: String,
+        phoneNumber: String,
+        message: String,
+        scheduledTime: Long
+    ): Boolean {
+
+        val cleanPhoneNumber =
+            phoneNumber.trim()
+
+        val cleanMessage =
+            message.trim()
+
+        if (
+            cleanPhoneNumber.isBlank() ||
+            cleanMessage.isBlank() ||
+            scheduledTime <=
+            System.currentTimeMillis()
+        ) {
+            return false
+        }
+
+        val scheduledSms =
+            ScheduledSms(
+                id = createUniqueId(),
+                contactName =
+                    contactName.trim(),
+                phoneNumber =
+                    cleanPhoneNumber,
+                message =
+                    cleanMessage,
+                scheduledTime =
+                    scheduledTime
+            )
+
+        val scheduled =
+            scheduledSmsScheduler.schedule(
+                scheduledSms
+            )
+
+        if (!scheduled) {
+            return false
+        }
+
+        scheduledSmsPreferences
+            .saveScheduledMessage(
+                scheduledSms
+            )
+
+        loadScheduledMessages(
+            cleanPhoneNumber
+        )
+
+        return true
+    }
+
+    /*
+     * Edit button click hote hi message editing mode me
+     * mark hoga aur original alarm cancel hoga.
+     */
+    fun beginEditingScheduledMessage(
+        scheduledSms: ScheduledSms
+    ): Boolean {
+
+        val savedMessage =
+            scheduledSmsPreferences
+                .getScheduledMessage(
+                    scheduledSms.id
+                )
+                ?: return false
+
+        if (
+            savedMessage.scheduledTime <=
+            System.currentTimeMillis()
+        ) {
+
+            loadScheduledMessages(
+                savedMessage.phoneNumber
+            )
+
+            return false
+        }
+
+        val marked =
+            scheduledSmsPreferences
+                .markMessageEditing(
+                    savedMessage.id
+                )
+
+        if (!marked) {
+            return false
+        }
+
+        scheduledSmsScheduler.cancel(
+            savedMessage.id
+        )
+
+        return true
+    }
+
+    /*
+     * User edit dialog close/cancel kare to:
+     * original time future me hai -> alarm restore
+     * original time pass ho gaya -> schedule remove
+     */
+    fun cancelEditingScheduledMessage(
+        scheduledSms: ScheduledSms
+    ) {
+
+        scheduledSmsPreferences
+            .clearMessageEditing(
+                scheduledSms.id
+            )
+
+        if (
+            scheduledSms.scheduledTime >
+            System.currentTimeMillis()
+        ) {
+
+            val restored =
+                scheduledSmsScheduler.schedule(
+                    scheduledSms
+                )
+
+            if (!restored) {
+
+                scheduledSmsPreferences
+                    .deleteScheduledMessage(
+                        scheduledSms.id
+                    )
+            }
+
+        } else {
+
+            scheduledSmsPreferences
+                .deleteScheduledMessage(
+                    scheduledSms.id
+                )
+        }
+
+        loadScheduledMessages(
+            scheduledSms.phoneNumber
+        )
+    }
+
+    fun updateScheduledMessage(
+        oldScheduledSms: ScheduledSms,
+        message: String,
+        scheduledTime: Long
+    ): Boolean {
+
+        val cleanMessage =
+            message.trim()
+
+        if (
+            cleanMessage.isBlank() ||
+            scheduledTime <=
+            System.currentTimeMillis()
+        ) {
+            return false
+        }
+
+        val savedOldMessage =
+            scheduledSmsPreferences
+                .getScheduledMessage(
+                    oldScheduledSms.id
+                )
+                ?: return false
+
+        val updatedScheduledSms =
+            savedOldMessage.copy(
+                message =
+                    cleanMessage,
+                scheduledTime =
+                    scheduledTime
+            )
+
+        /*
+         * beginEditingScheduledMessage() alarm pehle hi
+         * cancel karta hai, phir bhi safety ke liye cancel.
+         */
+        scheduledSmsScheduler.cancel(
+            savedOldMessage.id
+        )
+
+        val rescheduled =
+            scheduledSmsScheduler.schedule(
+                updatedScheduledSms
+            )
+
+        if (!rescheduled) {
+
+            /*
+             * New alarm fail hua. Original time future me
+             * ho to old schedule restore karenge.
+             */
+            if (
+                savedOldMessage.scheduledTime >
+                System.currentTimeMillis()
+            ) {
+
+                scheduledSmsScheduler.schedule(
+                    savedOldMessage
+                )
+
+            } else {
+
+                scheduledSmsPreferences
+                    .deleteScheduledMessage(
+                        savedOldMessage.id
+                    )
+            }
+
+            scheduledSmsPreferences
+                .clearMessageEditing(
+                    savedOldMessage.id
+                )
+
+            loadScheduledMessages(
+                savedOldMessage.phoneNumber
+            )
+
+            return false
+        }
+
+        scheduledSmsPreferences
+            .saveScheduledMessage(
+                updatedScheduledSms
+            )
+
+        scheduledSmsPreferences
+            .clearMessageEditing(
+                updatedScheduledSms.id
+            )
+
+        loadScheduledMessages(
+            updatedScheduledSms.phoneNumber
+        )
+
+        return true
+    }
+
+    fun cancelScheduledMessage(
+        scheduledSms: ScheduledSms
+    ) {
+
+        scheduledSmsScheduler.cancel(
+            scheduledSms.id
+        )
+
+        scheduledSmsPreferences
+            .clearMessageEditing(
+                scheduledSms.id
+            )
+
+        scheduledSmsPreferences
+            .deleteScheduledMessage(
+                scheduledSms.id
+            )
+
+        loadScheduledMessages(
+            scheduledSms.phoneNumber
+        )
+    }
+
+    fun sendScheduledMessageNow(
+        scheduledSms: ScheduledSms
+    ): Boolean {
+
+        if (
+            scheduledSms.phoneNumber.isBlank() ||
+            scheduledSms.message.isBlank()
+        ) {
+            return false
+        }
+
+        scheduledSmsScheduler.cancel(
+            scheduledSms.id
+        )
+
+        scheduledSmsPreferences
+            .clearMessageEditing(
+                scheduledSms.id
+            )
+
+        scheduledSmsPreferences
+            .deleteScheduledMessage(
+                scheduledSms.id
+            )
+
+        loadScheduledMessages(
+            scheduledSms.phoneNumber
+        )
+
+        viewModelScope.launch {
+
+            val insertedMessageId =
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    repository
+                        .insertOutgoingMessage(
+                            phoneNumber =
+                                scheduledSms
+                                    .phoneNumber,
+                            body =
+                                scheduledSms
+                                    .message
+                        )
+                }
+
+            val handedOff =
+                repository.sendSms(
+                    phoneNumber =
+                        scheduledSms.phoneNumber,
+                    message =
+                        scheduledSms.message,
+                    onSentResult = {
+                            confirmedSent ->
+
+                        if (
+                            insertedMessageId !=
+                            -1L
+                        ) {
+
+                            viewModelScope.launch(
+                                Dispatchers.IO
+                            ) {
+
+                                if (confirmedSent) {
+
+                                    repository
+                                        .markMessageSent(
+                                            insertedMessageId
+                                        )
+
+                                } else {
+
+                                    repository
+                                        .markMessageFailed(
+                                            insertedMessageId
+                                        )
+                                }
+                            }
+                        }
+
+                        currentConversationId
+                            ?.let {
+                                    conversationId ->
+
+                                refreshMessages(
+                                    conversationId
+                                )
+                            }
+                    }
+                )
+
+            if (!handedOff) {
+
+                if (
+                    insertedMessageId !=
+                    -1L
+                ) {
+
+                    withContext(
+                        Dispatchers.IO
+                    ) {
+
+                        repository
+                            .markMessageFailed(
+                                insertedMessageId
+                            )
+                    }
+                }
+
+                currentConversationId
+                    ?.let {
+                            conversationId ->
+
+                        refreshMessages(
+                            conversationId
+                        )
+                    }
+            }
+        }
+
+        return true
+    }
+
+    fun isMessageStarred(
+        messageId: Long
+    ): Boolean {
+
+        return _starredMessageIds
+            .value
+            .contains(
+                messageId
+            )
+    }
+
+    fun toggleStarMessage(
+        message: Message
+    ): Boolean {
+
+        if (
+            !isPersistedId(
+                message.id
+            )
+        ) {
+            return false
+        }
+
+        val currentlyStarred =
+            isMessageStarred(
+                message.id
+            )
+
+        val changed =
+            if (currentlyStarred) {
+
+                starredMessagesPreferences
+                    .unstarMessage(
+                        message.id
+                    )
+
+            } else {
+
+                starredMessagesPreferences
+                    .starMessage(
+                        message.id
+                    )
+            }
+
+        if (changed) {
+
+            loadStarredMessageIds()
+        }
+
+        return changed
+    }
+
+    fun sendMessage(
+        phoneNumber: String,
+        conversationId: Long,
+        message: String
+    ) {
+
+        currentConversationId =
+            conversationId
+
+        currentPhoneNumber =
+            phoneNumber
+
+        viewModelScope.launch {
+
+            val insertedId =
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    repository
+                        .insertOutgoingMessage(
+                            phoneNumber =
+                                phoneNumber,
+                            body =
+                                message
+                        )
+                }
+
+            val messageId =
+                if (
+                    insertedId != -1L
+                ) {
+
+                    insertedId
+
+                } else {
+
+                    -System.nanoTime()
+                }
+
+            val optimisticMessage =
+                Message(
+                    id =
+                        messageId,
+                    conversationId =
+                        conversationId,
+                    phoneNumber =
+                        phoneNumber,
+                    body =
+                        message,
+                    timestamp =
+                        System.currentTimeMillis(),
+                    isIncoming =
+                        false,
+                    isRead =
+                        true,
+                    status =
+                        MessageStatus.SENDING
+                )
+
+            _messages.value =
+                _messages.value +
+                        optimisticMessage
+
+            dispatchSend(
+                messageId =
+                    messageId,
+                phoneNumber =
+                    phoneNumber,
+                body =
+                    message
+            )
+        }
+    }
+
+    fun retrySend(
+        failedMessage: Message
+    ) {
+
+        updateMessageStatus(
+            messageId =
+                failedMessage.id,
+            newStatus =
+                MessageStatus.SENDING
+        )
+
+        if (
+            isPersistedId(
+                failedMessage.id
+            )
+        ) {
+
+            viewModelScope.launch {
+
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    repository
+                        .markMessageSending(
+                            failedMessage.id
+                        )
+                }
+            }
+        }
+
+        dispatchSend(
+            messageId =
+                failedMessage.id,
+            phoneNumber =
+                failedMessage.phoneNumber,
+            body =
+                failedMessage.body
+        )
+    }
+
+    fun deleteMessage(
+        message: Message
+    ) {
+
+        _messages.value =
+            _messages.value
+                .filterNot {
+                        existingMessage ->
+
+                    existingMessage.id ==
+                            message.id
+                }
+
+        if (
+            !isPersistedId(
+                message.id
+            )
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+
+            val deleted =
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    repository.deleteMessage(
+                        messageId =
+                            message.id
+                    )
+                }
+
+            if (deleted) {
+
+                if (
+                    starredMessagesPreferences
+                        .isMessageStarred(
+                            message.id
+                        )
+                ) {
+
+                    starredMessagesPreferences
+                        .unstarMessage(
+                            message.id
+                        )
+
+                    loadStarredMessageIds()
+                }
+
+            } else {
+
+                val refreshedMessages =
+                    withContext(
+                        Dispatchers.IO
+                    ) {
+
+                        repository.getMessages(
+                            conversationId =
+                                message.conversationId
+                        )
+                    }
+
+                _messages.value =
+                    refreshedMessages
+            }
+        }
+    }
+
+    private fun loadStarredMessageIds() {
+
+        _starredMessageIds.value =
+            starredMessagesPreferences
+                .getStarredMessageIds()
+    }
+
+    private fun dispatchSend(
+        messageId: Long,
+        phoneNumber: String,
+        body: String
+    ) {
+
+        val handedOff =
+            repository.sendSms(
+                phoneNumber =
+                    phoneNumber,
+                message =
+                    body,
+                onSentResult = {
+                        confirmedSent ->
+
+                    onSendResult(
+                        messageId =
+                            messageId,
+                        confirmedSent =
+                            confirmedSent
+                    )
+                }
+            )
+
+        if (!handedOff) {
+
+            onSendResult(
+                messageId =
+                    messageId,
+                confirmedSent =
+                    false
+            )
+        }
+    }
+
+    private fun onSendResult(
+        messageId: Long,
+        confirmedSent: Boolean
+    ) {
+
+        updateMessageStatus(
+            messageId =
+                messageId,
+            newStatus =
+                if (confirmedSent) {
+
+                    MessageStatus.SENT
+
+                } else {
+
+                    MessageStatus.FAILED
+                }
+        )
+
+        if (
+            isPersistedId(
+                messageId
+            )
+        ) {
+
+            viewModelScope.launch {
+
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    if (confirmedSent) {
+
+                        repository
+                            .markMessageSent(
+                                messageId
+                            )
+
+                    } else {
+
+                        repository
+                            .markMessageFailed(
+                                messageId
+                            )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun scheduleProviderRefresh() {
+
+        val conversationId =
+            currentConversationId
+                ?: return
+
+        refreshJob?.cancel()
+
+        refreshJob =
+            viewModelScope.launch {
+
+                delay(
+                    250L
+                )
+
+                val refreshedMessages =
+                    withContext(
+                        Dispatchers.IO
+                    ) {
+
+                        repository.getMessages(
+                            conversationId
+                        )
+                    }
+
+                _messages.value =
+                    refreshedMessages
+
+                currentPhoneNumber
+                    ?.let {
+                            phoneNumber ->
+
+                        loadScheduledMessages(
+                            phoneNumber
+                        )
+                    }
+            }
+    }
+
+    private fun updateMessageStatus(
+        messageId: Long,
+        newStatus: MessageStatus
+    ) {
+
+        _messages.value =
+            _messages.value.map {
+                    existing ->
+
+                if (
+                    existing.id ==
+                    messageId
+                ) {
+
+                    existing.copy(
+                        status =
+                            newStatus
+                    )
+
+                } else {
+
+                    existing
+                }
+            }
+    }
+
+    private fun createUniqueId():
+            Long {
+
+        return System.currentTimeMillis() +
+                (0..999).random()
+    }
+
+    private fun isPersistedId(
+        id: Long
+    ): Boolean {
+
+        return id >= 0
+    }
+
+    override fun onCleared() {
+
+        refreshJob?.cancel()
+
+        try {
+
+            appContext.contentResolver
+                .unregisterContentObserver(
+                    smsContentObserver
+                )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            exception.printStackTrace()
+        }
+
+        super.onCleared()
+    }
+}
