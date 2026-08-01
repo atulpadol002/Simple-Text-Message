@@ -83,6 +83,8 @@ class ScheduledSmsPreferences(
 
     fun saveScheduledMessage(
         scheduledSms: ScheduledSms
+    ): Boolean = synchronized(
+        PREFERENCES_LOCK
     ) {
 
         val messages =
@@ -97,13 +99,15 @@ class ScheduledSmsPreferences(
             scheduledSms
         )
 
-        saveMessages(
+        return@synchronized saveMessages(
             messages
         )
     }
 
     fun deleteScheduledMessage(
         messageId: Long
+    ): Unit = synchronized(
+        PREFERENCES_LOCK
     ) {
 
         val messages =
@@ -154,7 +158,9 @@ class ScheduledSmsPreferences(
 
     fun markMessageEditing(
         messageId: Long
-    ): Boolean {
+    ): Boolean = synchronized(
+        PREFERENCES_LOCK
+    ) {
 
         val editingIds =
             getEditingMessageIds()
@@ -164,7 +170,7 @@ class ScheduledSmsPreferences(
             messageId.toString()
         )
 
-        return preferences
+        return@synchronized preferences
             .edit()
             .putStringSet(
                 KEY_EDITING_MESSAGE_IDS,
@@ -175,7 +181,9 @@ class ScheduledSmsPreferences(
 
     fun clearMessageEditing(
         messageId: Long
-    ): Boolean {
+    ): Boolean = synchronized(
+        PREFERENCES_LOCK
+    ) {
 
         val editingIds =
             getEditingMessageIds()
@@ -185,7 +193,7 @@ class ScheduledSmsPreferences(
             messageId.toString()
         )
 
-        return preferences
+        return@synchronized preferences
             .edit()
             .putStringSet(
                 KEY_EDITING_MESSAGE_IDS,
@@ -218,7 +226,7 @@ class ScheduledSmsPreferences(
 
     private fun saveMessages(
         messages: List<ScheduledSms>
-    ) {
+    ): Boolean {
 
         val jsonArray =
             JSONArray()
@@ -267,13 +275,13 @@ class ScheduledSmsPreferences(
                 )
             }
 
-        preferences
+        return preferences
             .edit()
             .putString(
                 KEY_SCHEDULED_MESSAGES,
                 jsonArray.toString()
             )
-            .apply()
+            .commit()
     }
 
     private fun normalizePhoneNumber(
@@ -300,6 +308,9 @@ class ScheduledSmsPreferences(
     }
 
     companion object {
+
+        private val PREFERENCES_LOCK =
+            Any()
 
         private const val PREFS_NAME =
             "scheduled_sms_preferences"

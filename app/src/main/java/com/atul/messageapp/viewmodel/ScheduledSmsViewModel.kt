@@ -100,18 +100,28 @@ class ScheduledSmsViewModel(
                     scheduledTime
             )
 
+        val persisted =
+            preferences.saveScheduledMessage(
+                scheduledSms
+            )
+
+        if (!persisted) {
+            return false
+        }
+
         val scheduled =
             scheduler.schedule(
                 scheduledSms
             )
 
         if (!scheduled) {
+
+            preferences.deleteScheduledMessage(
+                scheduledSms.id
+            )
+
             return false
         }
-
-        preferences.saveScheduledMessage(
-            scheduledSms
-        )
 
         loadScheduledMessages()
 
@@ -234,12 +244,49 @@ class ScheduledSmsViewModel(
             savedOldMessage.id
         )
 
-        val scheduled =
-            scheduler.schedule(
+        val persisted =
+            preferences.saveScheduledMessage(
                 updatedScheduledSms
             )
 
+        val scheduled =
+            persisted &&
+                    scheduler.schedule(
+                        updatedScheduledSms
+                    )
+
         if (!scheduled) {
+
+            val oldMessageRestored =
+                preferences.saveScheduledMessage(
+                    savedOldMessage
+                )
+
+            if (!oldMessageRestored) {
+
+                val updatedMessageRestored =
+                    preferences.saveScheduledMessage(
+                        updatedScheduledSms
+                    )
+
+                val updatedAlarmRestored =
+                    updatedMessageRestored &&
+                            scheduler.schedule(
+                                updatedScheduledSms
+                            )
+
+                preferences.clearMessageEditing(
+                    updatedScheduledSms.id
+                )
+
+                loadScheduledMessages()
+
+                return updatedAlarmRestored
+            }
+
+            preferences.clearMessageEditing(
+                savedOldMessage.id
+            )
 
             if (
                 savedOldMessage.scheduledTime >
@@ -249,26 +296,12 @@ class ScheduledSmsViewModel(
                 scheduler.schedule(
                     savedOldMessage
                 )
-
-            } else {
-
-                preferences.deleteScheduledMessage(
-                    savedOldMessage.id
-                )
             }
-
-            preferences.clearMessageEditing(
-                savedOldMessage.id
-            )
 
             loadScheduledMessages()
 
             return false
         }
-
-        preferences.saveScheduledMessage(
-            updatedScheduledSms
-        )
 
         preferences.clearMessageEditing(
             updatedScheduledSms.id
