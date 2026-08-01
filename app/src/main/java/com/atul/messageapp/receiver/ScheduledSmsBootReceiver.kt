@@ -27,18 +27,40 @@ class ScheduledSmsBootReceiver :
         val scheduler =
             ScheduledSmsScheduler(context)
 
-        val currentTime =
-            System.currentTimeMillis()
-
         preferences
             .getScheduledMessages()
-            .filter {
-                it.scheduledTime > currentTime
-            }
             .forEach { scheduledSms ->
+
+                preferences.clearMessageEditing(
+                    scheduledSms.id
+                )
+
+                val messageToSchedule =
+                    if (
+                        scheduledSms.scheduledTime >
+                        System.currentTimeMillis()
+                    ) {
+
+                        scheduledSms
+
+                    } else {
+
+                        scheduledSms.copy(
+                            scheduledTime =
+                                System.currentTimeMillis() +
+                                        RECOVERY_DELAY_MILLIS
+                        )
+                    }
+
                 scheduler.schedule(
-                    scheduledSms
+                    messageToSchedule
                 )
             }
+    }
+
+    companion object {
+
+        private const val RECOVERY_DELAY_MILLIS =
+            1_000L
     }
 }
