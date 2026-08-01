@@ -1,6 +1,7 @@
 package com.atul.messageapp.viewmodel
 
 import android.app.Application
+import android.telephony.PhoneNumberUtils
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.atul.messageapp.data.model.SmsConversation
@@ -8,8 +9,8 @@ import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.receiver.SmsEventBus
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
+import com.atul.messageapp.sms.SmsDeleter
+import com.atul.messageapp.utils.getContactName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,9 @@ class HomeViewModel(
             application
         )
 
+    private val smsDeleter =
+        SmsDeleter(application)
+
     private val _conversations =
         MutableStateFlow<List<SmsConversation>>(
             emptyList()
@@ -49,8 +53,27 @@ class HomeViewModel(
     val isLoading: StateFlow<Boolean> =
         _isLoading.asStateFlow()
 
+    private val _contactNames =
+        MutableStateFlow<Map<String, String>>(emptyMap())
+
+    val contactNames: StateFlow<Map<String, String>> =
+        _contactNames.asStateFlow()
+
+    private val _deletingConversationIds =
+        MutableStateFlow<Set<Long>>(emptySet())
+
+    val deletingConversationIds: StateFlow<Set<Long>> =
+        _deletingConversationIds.asStateFlow()
+
     private var loadJob:
             Job? = null
+
+    private var reloadPending = false
+
+    private val contactNameCache =
+        mutableMapOf<String, String>()
+
+    private var stateVersion = 0L
 
     init {
         observeIncomingSms()
@@ -70,21 +93,25 @@ class HomeViewModel(
 
     fun loadConversations() {
 
-        loadJob?.cancel()
+        if (loadJob?.isActive == true) {
+            reloadPending = true
+            return
+        }
 
-        val newLoadJob =
-            viewModelScope.launch(
-                start = CoroutineStart.LAZY
-            ) {
+        val showInitialLoading =
+            _conversations.value.isEmpty()
 
-            val currentLoadJob =
-                coroutineContext[Job]
+        val loadVersion = stateVersion
 
+        if (showInitialLoading) {
             _isLoading.value = true
+        }
+
+        loadJob = viewModelScope.launch {
 
             try {
 
-                val result =
+                val (result, resolvedContactNames) =
                     withContext(
                         Dispatchers.IO
                     ) {
@@ -93,7 +120,7 @@ class HomeViewModel(
                             archivePreferences
                                 .getArchivedThreadIds()
 
-                        smsRepository
+                        val conversations = smsRepository
                             .getConversations()
                             .filterNot {
                                     conversation ->
@@ -115,19 +142,37 @@ class HomeViewModel(
                                 isArchived ||
                                         isBlocked
                             }
+
+                        val names = conversations
+                            .map { conversation ->
+                                normalizeAddress(conversation.address)
+                            }
+                            .distinct()
+                            .associateWith { normalizedAddress ->
+                                contactNameCache.getOrPut(normalizedAddress) {
+                                    val address = conversations
+                                        .first { conversation ->
+                                            normalizeAddress(conversation.address) ==
+                                                    normalizedAddress
+                                        }
+                                        .address
+
+                                    getContactName(
+                                        context = getApplication(),
+                                        phoneNumber = address
+                                    )
+                                }
+                            }
+
+                        conversations to names
                     }
 
-                if (loadJob === currentLoadJob) {
-
-                    _conversations.value =
-                        result
+                if (loadVersion == stateVersion) {
+                    _conversations.value = result
+                    _contactNames.value = resolvedContactNames
+                } else {
+                    reloadPending = true
                 }
-
-            } catch (
-                exception: CancellationException
-            ) {
-
-                throw exception
 
             } catch (
                 exception: SecurityException
@@ -135,10 +180,8 @@ class HomeViewModel(
 
                 exception.printStackTrace()
 
-                if (loadJob === currentLoadJob) {
-
-                    _conversations.value =
-                        emptyList()
+                if (_conversations.value.isEmpty()) {
+                    _conversations.value = emptyList()
                 }
 
             } catch (
@@ -147,23 +190,59 @@ class HomeViewModel(
 
                 exception.printStackTrace()
 
-                if (loadJob === currentLoadJob) {
-
-                    _conversations.value =
-                        emptyList()
+                if (_conversations.value.isEmpty()) {
+                    _conversations.value = emptyList()
                 }
 
             } finally {
-
-                if (loadJob === currentLoadJob) {
-
+                if (showInitialLoading) {
                     _isLoading.value = false
+                }
+
+                loadJob = null
+
+                if (reloadPending) {
+                    reloadPending = false
+                    loadConversations()
                 }
             }
         }
+    }
 
-        loadJob = newLoadJob
-        newLoadJob.start()
+    fun deleteConversation(
+        conversation: SmsConversation
+    ) {
+        val threadId = conversation.threadId
+
+        if (threadId in _deletingConversationIds.value) {
+            return
+        }
+
+        _deletingConversationIds.value += threadId
+
+        viewModelScope.launch {
+            try {
+                val deleted = withContext(Dispatchers.IO) {
+                    smsDeleter.deleteConversation(threadId)
+                }
+
+                if (deleted) {
+                    stateVersion++
+                    _conversations.value =
+                        _conversations.value.filterNot {
+                            it.threadId == threadId
+                        }
+                }
+            } finally {
+                _deletingConversationIds.value -= threadId
+            }
+        }
+    }
+
+    companion object {
+        fun normalizeAddress(address: String): String =
+            PhoneNumberUtils.normalizeNumber(address)
+                .ifBlank { address.trim() }
     }
 
     fun archiveConversation(

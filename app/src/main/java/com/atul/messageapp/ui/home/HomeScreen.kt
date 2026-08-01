@@ -42,11 +42,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.data.model.SmsConversation
 import com.atul.messageapp.navigation.Routes
-import com.atul.messageapp.sms.SmsDeleter
 import com.atul.messageapp.ui.components.ConversationCard
 import com.atul.messageapp.ui.components.SearchBar
 import com.atul.messageapp.ui.components.TopBar
-import com.atul.messageapp.utils.getContactName
 import com.atul.messageapp.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.material3.rememberDrawerState
@@ -76,15 +74,17 @@ fun HomeScreen(
     val coroutineScope =
         rememberCoroutineScope()
 
-    val smsDeleter = remember(context) {
-        SmsDeleter(context)
-    }
-
     val conversations by
     homeViewModel.conversations.collectAsState()
 
     val isLoading by
     homeViewModel.isLoading.collectAsState()
+
+    val contactNames by
+    homeViewModel.contactNames.collectAsState()
+
+    val deletingConversationIds by
+    homeViewModel.deletingConversationIds.collectAsState()
 
     var searchText by remember {
         mutableStateOf("")
@@ -101,23 +101,11 @@ fun HomeScreen(
         mutableStateOf<SmsConversation?>(null)
     }
 
-    val contactNamesByThreadId =
-        remember(conversations) {
-            conversations.associate { conversation ->
-                conversation.threadId to
-                        getContactName(
-                            context = context,
-                            phoneNumber =
-                                conversation.address
-                        )
-            }
-        }
-
     val filteredConversations =
         remember(
             conversations,
             searchText,
-            contactNamesByThreadId
+            contactNames
         ) {
             if (searchText.isBlank()) {
                 conversations
@@ -125,8 +113,10 @@ fun HomeScreen(
                 conversations.filter { conversation ->
 
                     val contactName =
-                        contactNamesByThreadId[
-                            conversation.threadId
+                        contactNames[
+                            HomeViewModel.normalizeAddress(
+                                conversation.address
+                            )
                         ].orEmpty()
 
                     contactName.contains(
@@ -394,11 +384,11 @@ fun HomeScreen(
                             conversation = conversation,
                             onClick = {
                                 val contactName =
-                                    getContactName(
-                                        context = context,
-                                        phoneNumber =
+                                    contactNames[
+                                        HomeViewModel.normalizeAddress(
                                             conversation.address
-                                    )
+                                        )
+                                    ] ?: conversation.address
 
                                 onConversationClick(
                                     conversation.threadId,
@@ -505,15 +495,12 @@ fun HomeScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = conversation.threadId !in
+                            deletingConversationIds,
                     onClick = {
-                        val success =
-                            smsDeleter.deleteConversation(
-                                conversation.threadId
-                            )
-
-                        if (success) {
-                            homeViewModel.loadConversations()
-                        }
+                        homeViewModel.deleteConversation(
+                            conversation
+                        )
 
                         conversationToDelete = null
                     }
