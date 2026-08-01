@@ -1,9 +1,11 @@
 package com.atul.messageapp.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,8 @@ import java.util.Locale
 fun MessageBubble(
     message: Message,
     isStarred: Boolean = false,
+    isSelected: Boolean = false,
+    onClick: (Message) -> Unit = {},
     onRetryClick: (Message) -> Unit = {},
     onLongClick: (Message) -> Unit = {}
 ) {
@@ -89,6 +93,18 @@ fun MessageBubble(
             Date(message.timestamp)
         )
 
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (isSelected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                } else {
+                    androidx.compose.ui.graphics.Color.Transparent
+                },
+                RoundedCornerShape(12.dp)
+            )
+    ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -105,7 +121,7 @@ fun MessageBubble(
                 )
                 .combinedClickable(
                     onClick = {
-                        // Normal tap par action nahi
+                        onClick(message)
                     },
                     onLongClick = {
                         onLongClick(message)
@@ -252,5 +268,6 @@ fun MessageBubble(
                 }
             }
         }
+    }
     }
 }

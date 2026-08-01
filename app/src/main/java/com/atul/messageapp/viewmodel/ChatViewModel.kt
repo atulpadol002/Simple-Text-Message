@@ -725,6 +725,52 @@ class ChatViewModel(
         return changed
     }
 
+    fun setMessagesStarred(
+        messages: List<Message>,
+        starred: Boolean
+    ): Boolean {
+        val persistedMessages = messages.filter { isPersistedId(it.id) }
+        if (persistedMessages.isEmpty()) return false
+
+        var changed = false
+        persistedMessages.forEach { message ->
+            val messageChanged = if (starred) {
+                starredMessagesPreferences.starMessage(message.id)
+            } else {
+                starredMessagesPreferences.unstarMessage(message.id)
+            }
+            changed = messageChanged || changed
+        }
+        loadStarredMessageIds()
+        return changed
+    }
+
+    fun deleteMessages(
+        messages: List<Message>,
+        onComplete: (Boolean) -> Unit
+    ) {
+        val persistedMessages = messages.filter { isPersistedId(it.id) }
+        if (persistedMessages.isEmpty()) {
+            onComplete(false)
+            return
+        }
+
+        viewModelScope.launch {
+            val deletedIds = withContext(Dispatchers.IO) {
+                persistedMessages.mapNotNull { message ->
+                    if (repository.deleteMessage(message.id)) message.id else null
+                }.toSet()
+            }
+
+            if (deletedIds.isNotEmpty()) {
+                _messages.value = _messages.value.filterNot { it.id in deletedIds }
+                deletedIds.forEach { starredMessagesPreferences.unstarMessage(it) }
+                loadStarredMessageIds()
+            }
+            onComplete(deletedIds.size == persistedMessages.size)
+        }
+    }
+
     fun sendMessage(
         phoneNumber: String,
         conversationId: Long,

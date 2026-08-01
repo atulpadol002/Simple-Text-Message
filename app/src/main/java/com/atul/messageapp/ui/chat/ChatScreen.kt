@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -84,14 +85,20 @@ import android.net.Uri
 import android.provider.ContactsContract
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextFieldDefaults
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import com.atul.messageapp.sms.SmsDeleter
 import com.atul.messageapp.utils.ContactUtils
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.BackHandler
 
 @Composable
 fun ChatScreen(
@@ -163,10 +170,9 @@ fun ChatScreen(
             mutableStateOf(false)
         }
 
-    val selectedMessage =
-        remember {
-            mutableStateOf<Message?>(null)
-        }
+    var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
+    var showDeleteMessagesDialog by remember { mutableStateOf(false) }
+    var isDeletingMessages by remember { mutableStateOf(false) }
 
     val selectedScheduledMessage =
         remember {
@@ -192,6 +198,22 @@ fun ChatScreen(
 
     val listState =
         rememberLazyListState()
+
+    val selectedMessages = messages
+        .filter { it.id in selectedMessageIds }
+        .sortedBy { it.timestamp }
+    val allSelectedAreStarred = selectedMessages.isNotEmpty() &&
+            selectedMessages.all { it.id in starredMessageIds }
+
+    BackHandler(
+        enabled = showDeleteMessagesDialog || selectedMessageIds.isNotEmpty()
+    ) {
+        if (showDeleteMessagesDialog) {
+            showDeleteMessagesDialog = false
+        } else {
+            selectedMessageIds = emptySet()
+        }
+    }
 
     LaunchedEffect(
         conversationId,
@@ -278,7 +300,39 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-
+            if (selectedMessageIds.isNotEmpty()) {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { selectedMessageIds = emptySet() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close selection")
+                        }
+                    },
+                    title = { Text(selectedMessageIds.size.toString()) },
+                    actions = {
+                        IconButton(onClick = {
+                            val copiedText = selectedMessages.joinToString("\n") { it.body }
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("SMS messages", copiedText))
+                            selectedMessageIds = emptySet()
+                            Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                        }
+                        IconButton(onClick = {
+                            chatViewModel.setMessagesStarred(selectedMessages, !allSelectedAreStarred)
+                            selectedMessageIds = emptySet()
+                        }) {
+                            Icon(
+                                if (allSelectedAreStarred) Icons.Outlined.StarOutline else Icons.Default.Star,
+                                contentDescription = if (allSelectedAreStarred) "Unstar" else "Star"
+                            )
+                        }
+                        IconButton(onClick = { showDeleteMessagesDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        }
+                    }
+                )
+            } else {
             TopAppBar(
                 title = {
 
@@ -554,6 +608,7 @@ fun ChatScreen(
                     }
                 }
             )
+            }
         }
     ) { paddingValues ->
 
@@ -629,6 +684,18 @@ fun ChatScreen(
                                     .contains(
                                         message.id
                                     ),
+                            isSelected =
+                                message.id in selectedMessageIds,
+                            onClick = { tappedMessage ->
+                                if (selectedMessageIds.isNotEmpty()) {
+                                    selectedMessageIds =
+                                        if (tappedMessage.id in selectedMessageIds) {
+                                            selectedMessageIds - tappedMessage.id
+                                        } else {
+                                            selectedMessageIds + tappedMessage.id
+                                        }
+                                }
+                            },
                             onRetryClick = {
                                     failedMessage:
                                     Message ->
@@ -641,8 +708,8 @@ fun ChatScreen(
                                     longPressedMessage:
                                     Message ->
 
-                                selectedMessage.value =
-                                    longPressedMessage
+                                selectedMessageIds =
+                                    selectedMessageIds + longPressedMessage.id
                             }
                         )
                     }
@@ -685,14 +752,10 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        MaterialTheme
-                            .colorScheme
-                            .primaryContainer
-                    )
+                    .imePadding()
                     .padding(
-                        horizontal = 8.dp,
-                        vertical = 8.dp
+                        horizontal = 12.dp,
+                        vertical = 10.dp
                     ),
                 verticalAlignment =
                     Alignment.CenterVertically
@@ -745,11 +808,20 @@ fun ChatScreen(
                         )
                     },
                     singleLine =
-                        true,
+                        false,
+                    minLines = 1,
+                    maxLines = 5,
                     shape =
                         RoundedCornerShape(
                             24.dp
                         ),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                    ),
                     trailingIcon = {
 
                         IconButton(
@@ -910,167 +982,50 @@ fun ChatScreen(
         )
     }
 
-    selectedMessage.value
-        ?.let { message ->
-
-            val isStarred =
-                starredMessageIds.contains(
-                    message.id
+    if (showDeleteMessagesDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeletingMessages) showDeleteMessagesDialog = false
+            },
+            title = { Text("Delete") },
+            text = {
+                Text(
+                    if (selectedMessageIds.size == 1) {
+                        "Are you sure you want to delete this message?"
+                    } else {
+                        "Are you sure you want to delete these messages?"
+                    }
                 )
-
-            AlertDialog(
-                onDismissRequest = {
-
-                    selectedMessage.value =
-                        null
-                },
-                title = {
-
-                    Text(
-                        text =
-                            "Message options"
-                    )
-                },
-                text = {
-
-                    Text(
-                        text =
-                            message.body,
-                        maxLines = 3,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
-                },
-                confirmButton = {
-
-                    Row {
-
-                        TextButton(
-                            onClick = {
-
-                                val changed =
-                                    chatViewModel
-                                        .toggleStarMessage(
-                                            message
-                                        )
-
-                                selectedMessage.value =
-                                    null
-
-                                Toast.makeText(
-                                    context,
-                                    if (changed) {
-
-                                        if (isStarred) {
-                                            "Message unstarred"
-                                        } else {
-                                            "Message starred"
-                                        }
-
-                                    } else {
-
-                                        "Unable to update star"
-                                    },
-                                    Toast.LENGTH_SHORT
-                                ).show()
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isDeletingMessages,
+                    onClick = {
+                        if (!isDeletingMessages) {
+                            isDeletingMessages = true
+                            chatViewModel.deleteMessages(selectedMessages) { success ->
+                                isDeletingMessages = false
+                                if (success) {
+                                    showDeleteMessagesDialog = false
+                                    selectedMessageIds = emptySet()
+                                } else {
+                                    Toast.makeText(context, "Unable to delete message", Toast.LENGTH_SHORT).show()
+                                }
                             }
-                        ) {
-
-                            Text(
-                                text =
-                                    if (isStarred) {
-                                        "Unstar"
-                                    } else {
-                                        "Star"
-                                    }
-                            )
-                        }
-
-                        TextButton(
-                            onClick = {
-
-                                val clipboardManager =
-                                    context.getSystemService(
-                                        Context
-                                            .CLIPBOARD_SERVICE
-                                    ) as ClipboardManager
-
-                                clipboardManager
-                                    .setPrimaryClip(
-                                        ClipData.newPlainText(
-                                            "SMS message",
-                                            message.body
-                                        )
-                                    )
-
-                                selectedMessage.value =
-                                    null
-
-                                Toast.makeText(
-                                    context,
-                                    "Message copied",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        ) {
-
-                            Text(
-                                text =
-                                    "Copy"
-                            )
                         }
                     }
-                },
-                dismissButton = {
-
-                    Row {
-
-                        TextButton(
-                            onClick = {
-
-                                chatViewModel
-                                    .deleteMessage(
-                                        message
-                                    )
-
-                                selectedMessage.value =
-                                    null
-
-                                Toast.makeText(
-                                    context,
-                                    "Message deleted",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        ) {
-
-                            Text(
-                                text =
-                                    "Delete",
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .error
-                            )
-                        }
-
-                        TextButton(
-                            onClick = {
-
-                                selectedMessage.value =
-                                    null
-                            }
-                        ) {
-
-                            Text(
-                                text =
-                                    "Cancel"
-                            )
-                        }
-                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
-            )
-        }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isDeletingMessages,
+                    onClick = { showDeleteMessagesDialog = false }
+                ) { Text("Cancel") }
+            }
+        )
+    }
 
     selectedScheduledMessage.value
         ?.let { scheduledSms ->
