@@ -54,6 +54,7 @@ import androidx.compose.material3.DrawerValue
 
 @Composable
 fun HomeScreen(
+    isActive: Boolean,
     onNewMessageClick: () -> Unit,
     onConversationClick: (
         Long,
@@ -168,7 +169,7 @@ fun HomeScreen(
         }
     }
 
-    BackHandler {
+    BackHandler(enabled = isActive) {
         showExitDialog = true
     }
 

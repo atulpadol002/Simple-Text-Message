@@ -1,7 +1,9 @@
 package com.atul.messageapp.navigation
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -27,6 +29,12 @@ fun AppNavigation(
 
     val navController =
         rememberNavController()
+
+    val currentRoute =
+        navController.currentBackStackEntryAsState()
+            .value
+            ?.destination
+            ?.route
 
     NavHost(
         navController = navController,
@@ -78,6 +86,7 @@ fun AppNavigation(
             Routes.Home.route
         ) {
             HomeScreen(
+                isActive = currentRoute == Routes.Home.route,
                 onNewMessageClick = {
                     navController.navigate(
                         Routes.NewMessage.route
@@ -117,6 +126,13 @@ fun AppNavigation(
         composable(
             Routes.Chat.route
         ) { backStackEntry ->
+
+            BackHandler {
+                navController.popBackStack(
+                    Routes.Home.route,
+                    inclusive = false
+                )
+            }
 
             val conversationId =
                 backStackEntry.arguments
@@ -216,6 +232,13 @@ fun AppNavigation(
         composable(
             Routes.RecycleBin.route
         ) {
+            BackHandler {
+                navController.popBackStack(
+                    Routes.Home.route,
+                    inclusive = false
+                )
+            }
+
             RecycleBinScreen(
                 onBackClick = {
                     navController.popBackStack()
