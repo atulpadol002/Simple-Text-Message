@@ -299,19 +299,30 @@ class ChatViewModel(
                     scheduledTime
             )
 
+        val persisted =
+            scheduledSmsPreferences
+                .saveScheduledMessage(
+                    scheduledSms
+                )
+
+        if (!persisted) {
+            return false
+        }
+
         val scheduled =
             scheduledSmsScheduler.schedule(
                 scheduledSms
             )
 
         if (!scheduled) {
+
+            scheduledSmsPreferences
+                .deleteScheduledMessage(
+                    scheduledSms.id
+                )
+
             return false
         }
-
-        scheduledSmsPreferences
-            .saveScheduledMessage(
-                scheduledSms
-            )
 
         loadScheduledMessages(
             cleanPhoneNumber
@@ -449,17 +460,57 @@ class ChatViewModel(
             savedOldMessage.id
         )
 
+        val persisted =
+            scheduledSmsPreferences
+                .saveScheduledMessage(
+                    updatedScheduledSms
+                )
+
         val rescheduled =
-            scheduledSmsScheduler.schedule(
-                updatedScheduledSms
-            )
+            persisted &&
+                    scheduledSmsScheduler.schedule(
+                        updatedScheduledSms
+                    )
 
         if (!rescheduled) {
 
-            /*
-             * New alarm fail hua. Original time future me
-             * ho to old schedule restore karenge.
-             */
+            val oldMessageRestored =
+                scheduledSmsPreferences
+                    .saveScheduledMessage(
+                        savedOldMessage
+                    )
+
+            if (!oldMessageRestored) {
+
+                val updatedMessageRestored =
+                    scheduledSmsPreferences
+                        .saveScheduledMessage(
+                            updatedScheduledSms
+                        )
+
+                val updatedAlarmRestored =
+                    updatedMessageRestored &&
+                            scheduledSmsScheduler.schedule(
+                                updatedScheduledSms
+                            )
+
+                scheduledSmsPreferences
+                    .clearMessageEditing(
+                        updatedScheduledSms.id
+                    )
+
+                loadScheduledMessages(
+                    updatedScheduledSms.phoneNumber
+                )
+
+                return updatedAlarmRestored
+            }
+
+            scheduledSmsPreferences
+                .clearMessageEditing(
+                    savedOldMessage.id
+                )
+
             if (
                 savedOldMessage.scheduledTime >
                 System.currentTimeMillis()
@@ -468,19 +519,7 @@ class ChatViewModel(
                 scheduledSmsScheduler.schedule(
                     savedOldMessage
                 )
-
-            } else {
-
-                scheduledSmsPreferences
-                    .deleteScheduledMessage(
-                        savedOldMessage.id
-                    )
             }
-
-            scheduledSmsPreferences
-                .clearMessageEditing(
-                    savedOldMessage.id
-                )
 
             loadScheduledMessages(
                 savedOldMessage.phoneNumber
@@ -488,11 +527,6 @@ class ChatViewModel(
 
             return false
         }
-
-        scheduledSmsPreferences
-            .saveScheduledMessage(
-                updatedScheduledSms
-            )
 
         scheduledSmsPreferences
             .clearMessageEditing(
