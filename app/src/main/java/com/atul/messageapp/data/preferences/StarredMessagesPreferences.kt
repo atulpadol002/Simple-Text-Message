@@ -70,6 +70,25 @@ class StarredMessagesPreferences(
         return saveIds(currentIds)
     }
 
+    fun removeStarredMessageIds(
+        messageIds: Set<Long>
+    ): Boolean {
+
+        if (messageIds.isEmpty()) {
+            return true
+        }
+
+        val currentIds =
+            getStarredMessageIds()
+                .toMutableSet()
+
+        if (!currentIds.removeAll(messageIds)) {
+            return true
+        }
+
+        return saveIds(currentIds)
+    }
+
     fun toggleStar(
         messageId: Long
     ): Boolean {
