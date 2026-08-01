@@ -1,5 +1,6 @@
 package com.atul.messageapp.data.repository
 
+import android.content.ContentValues
 import android.content.Context
 import android.provider.Telephony
 import com.atul.messageapp.data.model.DeletedMessage
@@ -319,4 +320,108 @@ class SmsRepository(
             null
         }
     }
+
+    fun restoredMessageExists(
+        message: DeletedMessage
+    ): Boolean? {
+        val selection = buildString {
+            append(
+                "${Telephony.Sms.ADDRESS}=? AND " +
+                        "${Telephony.Sms.BODY}=? AND " +
+                        "${Telephony.Sms.DATE}=? AND " +
+                        "${Telephony.Sms.TYPE}=?"
+            )
+
+            if (message.sentDate != null) {
+                append(" AND ${Telephony.Sms.DATE_SENT}=?")
+            }
+        }
+
+        val selectionArgs = buildList {
+            add(message.address)
+            add(message.body)
+            add(message.date.toString())
+            add(message.type.toString())
+            message.sentDate?.let { sentDate ->
+                add(sentDate.toString())
+            }
+        }.toTypedArray()
+
+        return try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID),
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                cursor.moveToFirst()
+            } ?: false
+        } catch (exception: SecurityException) {
+            exception.printStackTrace()
+            null
+        } catch (exception: Exception) {
+            exception.printStackTrace()
+            null
+        }
+    }
+
+    fun restoreMessage(
+        message: DeletedMessage
+    ): Boolean {
+        val values = ContentValues().apply {
+            put(Telephony.Sms.ADDRESS, message.address)
+            put(Telephony.Sms.BODY, message.body)
+            put(Telephony.Sms.DATE, message.date)
+            message.sentDate?.let { sentDate ->
+                put(Telephony.Sms.DATE_SENT, sentDate)
+            }
+            put(Telephony.Sms.TYPE, message.type)
+            put(Telephony.Sms.READ, if (message.read) 1 else 0)
+            put(Telephony.Sms.SEEN, if (message.seen) 1 else 0)
+            message.status?.let { status ->
+                put(Telephony.Sms.STATUS, status)
+            }
+            message.serviceCenter?.let { serviceCenter ->
+                put(Telephony.Sms.SERVICE_CENTER, serviceCenter)
+            }
+            message.subscriptionId?.let { subscriptionId ->
+                put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
+            }
+        }
+
+        return try {
+            context.contentResolver.insert(
+                message.destinationUri(),
+                values
+            ) != null
+        } catch (exception: SecurityException) {
+            exception.printStackTrace()
+            false
+        } catch (exception: Exception) {
+            exception.printStackTrace()
+            false
+        }
+    }
+
+    private fun DeletedMessage.destinationUri() =
+        when (type) {
+            Telephony.Sms.MESSAGE_TYPE_INBOX ->
+                Telephony.Sms.Inbox.CONTENT_URI
+
+            Telephony.Sms.MESSAGE_TYPE_SENT ->
+                Telephony.Sms.Sent.CONTENT_URI
+
+            Telephony.Sms.MESSAGE_TYPE_DRAFT ->
+                Telephony.Sms.Draft.CONTENT_URI
+
+            Telephony.Sms.MESSAGE_TYPE_OUTBOX ->
+                Telephony.Sms.Outbox.CONTENT_URI
+
+            Telephony.Sms.MESSAGE_TYPE_FAILED,
+            Telephony.Sms.MESSAGE_TYPE_QUEUED ->
+                Telephony.Sms.CONTENT_URI
+
+            else -> Telephony.Sms.CONTENT_URI
+        }
 }
