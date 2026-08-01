@@ -76,13 +76,7 @@ class SmsSender(
 
         lateinit var receiver: BroadcastReceiver
 
-        fun finish(
-            success: Boolean
-        ) {
-
-            if (!completed.compareAndSet(false, true)) {
-                return
-            }
+        fun cleanUp() {
 
             timeoutHandler.removeCallbacksAndMessages(
                 uniqueId
@@ -96,6 +90,17 @@ class SmsSender(
 
             } catch (_: IllegalArgumentException) {
             }
+        }
+
+        fun finish(
+            success: Boolean
+        ) {
+
+            if (!completed.compareAndSet(false, true)) {
+                return
+            }
+
+            cleanUp()
 
             onSentResult(success)
         }
@@ -220,9 +225,8 @@ class SmsSender(
 
             exception.printStackTrace()
 
-            finish(
-                success = false
-            )
+            completed.set(true)
+            cleanUp()
 
             false
         }
