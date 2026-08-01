@@ -75,7 +75,7 @@ class ContactReader(
 
             contacts
 
-        } catch (exception: SecurityException) {
+        } catch (exception: RuntimeException) {
 
             emptyList()
         }
