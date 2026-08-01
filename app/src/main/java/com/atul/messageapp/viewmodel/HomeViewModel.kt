@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.atul.messageapp.data.model.SmsConversation
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
+import com.atul.messageapp.data.preferences.PinnedConversationsPreferences
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.receiver.SmsEventBus
 import com.atul.messageapp.sms.SmsDeleter
@@ -38,6 +39,9 @@ class HomeViewModel(
     private val smsDeleter =
         SmsDeleter(application)
 
+    private val pinnedPreferences =
+        PinnedConversationsPreferences(application)
+
     private val _conversations =
         MutableStateFlow<List<SmsConversation>>(
             emptyList()
@@ -64,6 +68,15 @@ class HomeViewModel(
 
     val deletingConversationIds: StateFlow<Set<Long>> =
         _deletingConversationIds.asStateFlow()
+
+    private val _selectedThreadIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedThreadIds: StateFlow<Set<Long>> = _selectedThreadIds.asStateFlow()
+
+    private val _pinnedThreadIds = MutableStateFlow(pinnedPreferences.getPinnedThreadIds())
+    val pinnedThreadIds: StateFlow<Set<Long>> = _pinnedThreadIds.asStateFlow()
+
+    private val _isDeletingSelection = MutableStateFlow(false)
+    val isDeletingSelection: StateFlow<Boolean> = _isDeletingSelection.asStateFlow()
 
     private var loadJob:
             Job? = null
@@ -111,7 +124,7 @@ class HomeViewModel(
 
             try {
 
-                val (result, resolvedContactNames) =
+                val result =
                     withContext(
                         Dispatchers.IO
                     ) {
@@ -120,8 +133,12 @@ class HomeViewModel(
                             archivePreferences
                                 .getArchivedThreadIds()
 
-                        val conversations = smsRepository
-                            .getConversations()
+                        val providerConversations = smsRepository.getConversations()
+                        val validThreadIds = providerConversations.map { it.threadId }.toSet()
+                        val pinnedIds = pinnedPreferences.getPinnedThreadIds()
+                        pinnedPreferences.removePinnedThreadIds(pinnedIds - validThreadIds)
+
+                        val conversations = providerConversations
                             .filterNot {
                                     conversation ->
 
@@ -142,6 +159,10 @@ class HomeViewModel(
                                 isArchived ||
                                         isBlocked
                             }
+                            .sortedWith(
+                                compareByDescending<SmsConversation> { it.threadId in pinnedIds }
+                                    .thenByDescending { it.date }
+                            )
 
                         val names = conversations
                             .map { conversation ->
@@ -164,12 +185,13 @@ class HomeViewModel(
                                 }
                             }
 
-                        conversations to names
+                        Triple(conversations, names, pinnedIds intersect validThreadIds)
                     }
 
                 if (loadVersion == stateVersion) {
-                    _conversations.value = result
-                    _contactNames.value = resolvedContactNames
+                    _conversations.value = result.first
+                    _contactNames.value = result.second
+                    _pinnedThreadIds.value = result.third
                 } else {
                     reloadPending = true
                 }
@@ -235,6 +257,60 @@ class HomeViewModel(
                 }
             } finally {
                 _deletingConversationIds.value -= threadId
+            }
+        }
+    }
+
+    fun toggleSelection(threadId: Long) {
+        _selectedThreadIds.value = _selectedThreadIds.value.toMutableSet().apply {
+            if (!add(threadId)) remove(threadId)
+        }
+    }
+
+    fun clearSelection() {
+        _selectedThreadIds.value = emptySet()
+    }
+
+    fun togglePinnedSelection() {
+        val selected = _selectedThreadIds.value
+        if (selected.isEmpty()) return
+        val pin = !selected.all { it in _pinnedThreadIds.value }
+        pinnedPreferences.setPinned(selected, pin)
+        _pinnedThreadIds.value = if (pin) _pinnedThreadIds.value + selected else _pinnedThreadIds.value - selected
+        _conversations.value = _conversations.value.sortedWith(
+            compareByDescending<SmsConversation> { it.threadId in _pinnedThreadIds.value }
+                .thenByDescending { it.date }
+        )
+        clearSelection()
+    }
+
+    fun archiveSelected() {
+        val selected = _selectedThreadIds.value
+        if (selected.isEmpty()) return
+        selected.forEach(archivePreferences::archiveConversation)
+        stateVersion++
+        _conversations.value = _conversations.value.filterNot { it.threadId in selected }
+        clearSelection()
+    }
+
+    fun deleteSelected() {
+        val selected = _selectedThreadIds.value
+        if (selected.isEmpty() || _isDeletingSelection.value) return
+        _isDeletingSelection.value = true
+        _deletingConversationIds.value += selected
+        viewModelScope.launch {
+            try {
+                val deletedIds = withContext(Dispatchers.IO) {
+                    selected.filter { smsDeleter.deleteConversation(it) }.toSet()
+                }
+                if (deletedIds.isNotEmpty()) {
+                    stateVersion++
+                    _conversations.value = _conversations.value.filterNot { it.threadId in deletedIds }
+                }
+                clearSelection()
+            } finally {
+                _deletingConversationIds.value -= selected
+                _isDeletingSelection.value = false
             }
         }
     }

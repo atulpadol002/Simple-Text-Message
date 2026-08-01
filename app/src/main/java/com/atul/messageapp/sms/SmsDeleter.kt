@@ -6,6 +6,7 @@ import android.util.Log
 import com.atul.messageapp.data.model.DeletedConversation
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.StarredMessagesPreferences
+import com.atul.messageapp.data.preferences.PinnedConversationsPreferences
 import com.atul.messageapp.data.repository.RecycleBinRepository
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.utils.getContactName
@@ -22,6 +23,9 @@ class SmsDeleter(
 
     private val starredMessagesPreferences =
         StarredMessagesPreferences(appContext)
+
+    private val pinnedConversationsPreferences =
+        PinnedConversationsPreferences(appContext)
 
     private val smsRepository =
         SmsRepository(appContext)
@@ -96,6 +100,8 @@ class SmsDeleter(
             archivePreferences.unarchiveConversation(
                 threadId
             )
+
+            pinnedConversationsPreferences.removePinnedThreadIds(setOf(threadId))
 
             starredMessagesPreferences
                 .removeStarredMessageIds(
