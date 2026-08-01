@@ -14,75 +14,88 @@ class MessageDataSource(
 
         val messages = mutableListOf<Message>()
 
-        val cursor = context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            null,
-            "${Telephony.Sms.THREAD_ID}=?",
-            arrayOf(conversationId.toString()),
-            "${Telephony.Sms.DATE} ASC"
-        )
+        return try {
 
-        cursor?.use {
+            val cursor = context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                null,
+                "${Telephony.Sms.THREAD_ID}=?",
+                arrayOf(conversationId.toString()),
+                "${Telephony.Sms.DATE} ASC"
+            )
 
-            while (it.moveToNext()) {
+            cursor?.use {
 
-                val id = it.getLong(
-                    it.getColumnIndexOrThrow(Telephony.Sms._ID)
-                )
+                while (it.moveToNext()) {
 
-                val body = it.getString(
-                    it.getColumnIndexOrThrow(Telephony.Sms.BODY)
-                ) ?: ""
-
-                val address = it.getString(
-                    it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
-                ) ?: ""
-
-                val date = it.getLong(
-                    it.getColumnIndexOrThrow(Telephony.Sms.DATE)
-                )
-
-                val type = it.getInt(
-                    it.getColumnIndexOrThrow(Telephony.Sms.TYPE)
-                )
-
-                val read = it.getInt(
-                    it.getColumnIndexOrThrow(Telephony.Sms.READ)
-                ) == 1
-
-                val status = when (type) {
-
-                    Telephony.Sms.MESSAGE_TYPE_OUTBOX,
-                    Telephony.Sms.MESSAGE_TYPE_QUEUED ->
-                        MessageStatus.SENDING
-
-                    Telephony.Sms.MESSAGE_TYPE_SENT ->
-                        MessageStatus.SENT
-
-                    Telephony.Sms.MESSAGE_TYPE_FAILED ->
-                        MessageStatus.FAILED
-
-                    else ->
-                        MessageStatus.NONE
-                }
-
-                messages.add(
-                    Message(
-                        id = id,
-                        conversationId = conversationId,
-                        phoneNumber = address,
-                        body = body,
-                        timestamp = date,
-                        isIncoming =
-                            type == Telephony.Sms.MESSAGE_TYPE_INBOX,
-                        isRead = read,
-                        status = status
+                    val id = it.getLong(
+                        it.getColumnIndexOrThrow(Telephony.Sms._ID)
                     )
-                )
-            }
-        }
 
-        return messages
+                    val body = it.getString(
+                        it.getColumnIndexOrThrow(Telephony.Sms.BODY)
+                    ) ?: ""
+
+                    val address = it.getString(
+                        it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+                    ) ?: ""
+
+                    val date = it.getLong(
+                        it.getColumnIndexOrThrow(Telephony.Sms.DATE)
+                    )
+
+                    val type = it.getInt(
+                        it.getColumnIndexOrThrow(Telephony.Sms.TYPE)
+                    )
+
+                    val read = it.getInt(
+                        it.getColumnIndexOrThrow(Telephony.Sms.READ)
+                    ) == 1
+
+                    val status = when (type) {
+
+                        Telephony.Sms.MESSAGE_TYPE_OUTBOX,
+                        Telephony.Sms.MESSAGE_TYPE_QUEUED ->
+                            MessageStatus.SENDING
+
+                        Telephony.Sms.MESSAGE_TYPE_SENT ->
+                            MessageStatus.SENT
+
+                        Telephony.Sms.MESSAGE_TYPE_FAILED ->
+                            MessageStatus.FAILED
+
+                        else ->
+                            MessageStatus.NONE
+                    }
+
+                    messages.add(
+                        Message(
+                            id = id,
+                            conversationId = conversationId,
+                            phoneNumber = address,
+                            body = body,
+                            timestamp = date,
+                            isIncoming =
+                            type == Telephony.Sms.MESSAGE_TYPE_INBOX,
+                            isRead = read,
+                            status = status
+                        )
+                    )
+                }
+            }
+
+            messages
+
+        } catch (exception: SecurityException) {
+
+            exception.printStackTrace()
+            emptyList()
+
+        } catch (exception: RuntimeException) {
+
+            exception.printStackTrace()
+            emptyList()
+        }
     }
 
     fun insertOutgoingMessage(
