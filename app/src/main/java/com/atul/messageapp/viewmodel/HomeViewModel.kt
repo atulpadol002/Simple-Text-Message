@@ -8,7 +8,10 @@ import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.receiver.SmsEventBus
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,6 +49,9 @@ class HomeViewModel(
     val isLoading: StateFlow<Boolean> =
         _isLoading.asStateFlow()
 
+    private var loadJob:
+            Job? = null
+
     init {
         observeIncomingSms()
     }
@@ -64,7 +70,15 @@ class HomeViewModel(
 
     fun loadConversations() {
 
-        viewModelScope.launch {
+        loadJob?.cancel()
+
+        val newLoadJob =
+            viewModelScope.launch(
+                start = CoroutineStart.LAZY
+            ) {
+
+            val currentLoadJob =
+                coroutineContext[Job]
 
             _isLoading.value = true
 
@@ -103,8 +117,17 @@ class HomeViewModel(
                             }
                     }
 
-                _conversations.value =
-                    result
+                if (loadJob === currentLoadJob) {
+
+                    _conversations.value =
+                        result
+                }
+
+            } catch (
+                exception: CancellationException
+            ) {
+
+                throw exception
 
             } catch (
                 exception: SecurityException
@@ -112,8 +135,11 @@ class HomeViewModel(
 
                 exception.printStackTrace()
 
-                _conversations.value =
-                    emptyList()
+                if (loadJob === currentLoadJob) {
+
+                    _conversations.value =
+                        emptyList()
+                }
 
             } catch (
                 exception: Exception
@@ -121,14 +147,23 @@ class HomeViewModel(
 
                 exception.printStackTrace()
 
-                _conversations.value =
-                    emptyList()
+                if (loadJob === currentLoadJob) {
+
+                    _conversations.value =
+                        emptyList()
+                }
 
             } finally {
 
-                _isLoading.value = false
+                if (loadJob === currentLoadJob) {
+
+                    _isLoading.value = false
+                }
             }
         }
+
+        loadJob = newLoadJob
+        newLoadJob.start()
     }
 
     fun archiveConversation(

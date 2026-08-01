@@ -110,11 +110,6 @@ class ChatViewModel(
                 uri: Uri?
             ) {
 
-                super.onChange(
-                    selfChange,
-                    uri
-                )
-
                 scheduleProviderRefresh()
             }
         }

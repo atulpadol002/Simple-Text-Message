@@ -7,7 +7,10 @@ import com.atul.messageapp.data.model.SmsConversation
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.receiver.SmsEventBus
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +42,9 @@ class ArchiveViewModel(
     val isLoading: StateFlow<Boolean> =
         _isLoading.asStateFlow()
 
+    private var loadJob:
+            Job? = null
+
     init {
         observeIncomingSms()
     }
@@ -52,7 +58,16 @@ class ArchiveViewModel(
     }
 
     fun loadArchivedConversations() {
-        viewModelScope.launch {
+
+        loadJob?.cancel()
+
+        val newLoadJob =
+            viewModelScope.launch(
+                start = CoroutineStart.LAZY
+            ) {
+
+            val currentLoadJob =
+                coroutineContext[Job]
 
             _isLoading.value = true
 
@@ -75,36 +90,65 @@ class ArchiveViewModel(
                                 }
                                 .toSet()
 
-                        archivePreferences
-                            .removeArchivedThreadIds(
-                                archivedThreadIds -
-                                        validProviderThreadIds
-                            )
-
-                        providerConversations
-                            .filter { conversation ->
-                                archivedThreadIds.contains(
-                                    conversation.threadId
-                                )
-                            }
+                        Triple(
+                            archivedThreadIds,
+                            validProviderThreadIds,
+                            providerConversations
+                                .filter { conversation ->
+                                    archivedThreadIds.contains(
+                                        conversation.threadId
+                                    )
+                                }
+                        )
                     }
 
-                _conversations.value = result
+                if (loadJob === currentLoadJob) {
+
+                    archivePreferences
+                        .removeArchivedThreadIds(
+                            result.first -
+                                    result.second
+                        )
+
+                    _conversations.value =
+                        result.third
+                }
+
+            } catch (
+                exception: CancellationException
+            ) {
+
+                throw exception
 
             } catch (exception: SecurityException) {
 
                 exception.printStackTrace()
-                _conversations.value = emptyList()
+
+                if (loadJob === currentLoadJob) {
+
+                    _conversations.value = emptyList()
+                }
 
             } catch (exception: Exception) {
 
                 exception.printStackTrace()
-                _conversations.value = emptyList()
+
+                if (loadJob === currentLoadJob) {
+
+                    _conversations.value = emptyList()
+                }
 
             } finally {
-                _isLoading.value = false
+
+                if (loadJob === currentLoadJob) {
+
+                    _isLoading.value = false
+                }
             }
         }
+
+        loadJob = newLoadJob
+        newLoadJob.start()
     }
 
     fun unarchiveConversation(
