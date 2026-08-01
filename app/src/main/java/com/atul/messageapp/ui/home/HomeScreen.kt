@@ -2,30 +2,52 @@ package com.atul.messageapp.ui.home
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.RestoreFromTrash
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,523 +56,214 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.atul.messageapp.data.model.SmsConversation
 import com.atul.messageapp.navigation.Routes
 import com.atul.messageapp.ui.components.ConversationCard
 import com.atul.messageapp.ui.components.SearchBar
 import com.atul.messageapp.ui.components.TopBar
 import com.atul.messageapp.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.DrawerValue
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     isActive: Boolean,
     onNewMessageClick: () -> Unit,
-    onConversationClick: (
-        Long,
-        String,
-        String
-    ) -> Unit,
+    onConversationClick: (Long, String, String) -> Unit,
     onDrawerNavigate: (String) -> Unit
 ) {
-    val homeViewModel: HomeViewModel =
-        viewModel()
-
+    val homeViewModel: HomeViewModel = viewModel()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val conversations by homeViewModel.conversations.collectAsState()
+    val isLoading by homeViewModel.isLoading.collectAsState()
+    val contactNames by homeViewModel.contactNames.collectAsState()
+    val selectedIds by homeViewModel.selectedThreadIds.collectAsState()
+    val pinnedIds by homeViewModel.pinnedThreadIds.collectAsState()
+    val deleting by homeViewModel.isDeletingSelection.collectAsState()
+    var searchText by remember { mutableStateOf("") }
+    var showExitDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    val selectionMode = selectedIds.isNotEmpty()
+    val allSelectedPinned = selectionMode && selectedIds.all { it in pinnedIds }
 
-    val drawerState = rememberDrawerState(
-        initialValue = DrawerValue.Closed
-    )
-
-    val coroutineScope =
-        rememberCoroutineScope()
-
-    val conversations by
-    homeViewModel.conversations.collectAsState()
-
-    val isLoading by
-    homeViewModel.isLoading.collectAsState()
-
-    val contactNames by
-    homeViewModel.contactNames.collectAsState()
-
-    val deletingConversationIds by
-    homeViewModel.deletingConversationIds.collectAsState()
-
-    var searchText by remember {
-        mutableStateOf("")
-    }
-
-    var showExitDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var conversationToDelete by remember {
-        mutableStateOf<SmsConversation?>(null)
-    }
-    var conversationToArchive by remember {
-        mutableStateOf<SmsConversation?>(null)
-    }
-
-    val filteredConversations =
-        remember(
-            conversations,
-            searchText,
-            contactNames
-        ) {
-            if (searchText.isBlank()) {
-                conversations
-            } else {
-                conversations.filter { conversation ->
-
-                    val contactName =
-                        contactNames[
-                            HomeViewModel.normalizeAddress(
-                                conversation.address
-                            )
-                        ].orEmpty()
-
-                    contactName.contains(
-                        searchText,
-                        ignoreCase = true
-                    ) ||
-                            conversation.address.contains(
-                                searchText,
-                                ignoreCase = true
-                            ) ||
-                            conversation.body.contains(
-                                searchText,
-                                ignoreCase = true
-                            )
-                }
-            }
+    val filteredConversations = remember(conversations, searchText, contactNames) {
+        if (searchText.isBlank()) conversations else conversations.filter { conversation ->
+            val name = contactNames[HomeViewModel.normalizeAddress(conversation.address)].orEmpty()
+            name.contains(searchText, true) || conversation.address.contains(searchText, true) ||
+                conversation.body.contains(searchText, true)
         }
+    }
 
-    DisposableEffect(
-        lifecycleOwner
-    ) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-
-                if (
-                    event == Lifecycle.Event.ON_RESUME
-                ) {
-                    homeViewModel.loadConversations()
-                }
-            }
-
-        lifecycleOwner.lifecycle.addObserver(
-            observer
-        )
-
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) homeViewModel.loadConversations()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(
-                observer
-            )
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            homeViewModel.clearSelection()
         }
     }
+    LaunchedEffect(isActive) { if (!isActive) homeViewModel.clearSelection() }
 
     BackHandler(enabled = isActive) {
-        showExitDialog = true
+        when {
+            showDeleteDialog -> showDeleteDialog = false
+            selectionMode -> homeViewModel.clearSelection()
+            else -> showExitDialog = true
+        }
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !selectionMode,
         drawerContent = {
             ModalDrawerSheet {
-
-                Spacer(
-                    modifier = Modifier.height(20.dp)
-                )
-
-                Text(
-                    modifier = Modifier.padding(
-                        horizontal = 20.dp,
-                        vertical = 12.dp
-                    ),
-                    text = "Message App"
-                )
-
-                HorizontalDivider()
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Home")
-                    },
-                    selected = true,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = null
-                        )
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                        }
-                    }
-                )
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Archive Chats")
-                    },
-                    selected = false,
-                    icon = {
-                        Text("📦")
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            onDrawerNavigate(
-                                Routes.ArchiveChats.route
-                            )
-                        }
-                    }
-                )
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Theme")
-                    },
-                    selected = false,
-                    icon = {
-                        Text("🎨")
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-
-                            onDrawerNavigate(
-                                Routes.Theme.route
-                            )
-                        }
-                    }
-                )
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Scheduled SMS")
-                    },
-                    selected = false,
-                    icon = {
-                        Text("📅")
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            onDrawerNavigate(
-                                Routes.ScheduledSms.route
-                            )
-                        }
-                    }
-                )
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Block Numbers")
-                    },
-                    selected = false,
-                    icon = {
-                        Text("🔒")
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            onDrawerNavigate(
-                                Routes.BlockNumbers.route
-                            )
-                        }
-                    }
-                )
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Starred Messages")
-                    },
-                    selected = false,
-                    icon = {
-                        Text("⭐")
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            onDrawerNavigate(
-                                Routes.StarredMessages.route
-                            )
-                        }
-                    }
-                )
-
-                NavigationDrawerItem(
-                    label = {
-                        Text("Recycle Bin")
-                    },
-                    selected = false,
-                    icon = {
-                        Text("🗑️")
-                    },
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            onDrawerNavigate(
-                                Routes.RecycleBin.route
-                            )
-                        }
-                    }
-                )
+                DrawerHeader()
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                Spacer(Modifier.height(10.dp))
+                DrawerItem("Messages", Icons.Default.Home, true) { scope.launch { drawerState.close() } }
+                DrawerItem("Archive", Icons.Default.Archive) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.ArchiveChats.route) }
+                DrawerItem("Theme", Icons.Default.Palette) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.Theme.route) }
+                DrawerItem("Scheduled SMS", Icons.Default.Schedule) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.ScheduledSms.route) }
+                DrawerItem("Block Numbers", Icons.Default.Block) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.BlockNumbers.route) }
+                DrawerItem("Starred Messages", Icons.Default.Star) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.StarredMessages.route) }
+                DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.RecycleBin.route) }
             }
         }
     ) {
         Scaffold(
             topBar = {
-                TopBar(
-                    title = "Messages",
-                    onNavigationClick = {
-                        coroutineScope.launch {
-                            drawerState.open()
+                if (selectionMode) {
+                    TopAppBar(
+                        title = { Text("${selectedIds.size} selected") },
+                        navigationIcon = {
+                            IconButton(onClick = homeViewModel::clearSelection) {
+                                Icon(Icons.Default.Close, "Cancel selection")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = homeViewModel::togglePinnedSelection) {
+                                Icon(Icons.Default.PushPin, if (allSelectedPinned) "Unpin" else "Pin")
+                            }
+                            IconButton(onClick = homeViewModel::archiveSelected) {
+                                Icon(Icons.Default.Archive, "Archive selected conversations")
+                            }
+                            IconButton(enabled = !deleting, onClick = { showDeleteDialog = true }) {
+                                Icon(Icons.Default.Delete, "Delete selected conversations")
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    TopBar("Messages") { scope.launch { drawerState.open() } }
+                }
             },
             floatingActionButton = {
-                FloatingActionButton(
-                    onClick = onNewMessageClick
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "New Message"
-                    )
+                if (!selectionMode) FloatingActionButton(onClick = onNewMessageClick) {
+                    Icon(Icons.Default.Edit, "New Message")
                 }
             }
         ) { paddingValues ->
-
-            if (
-                isLoading &&
-                conversations.isEmpty()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment =
-                            Alignment.CenterHorizontally
-                    ) {
+            if (isLoading && conversations.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(paddingValues), Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator()
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
+                        Spacer(Modifier.height(12.dp))
                         Text("Syncing messages...")
                     }
                 }
-
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                ) {
-                    item {
-                        SearchBar(
-                            searchText = searchText,
-                            onValueChange = { newText ->
-                                searchText = newText
-                            }
-                        )
-                    }
-
-                    items(
-                        items = filteredConversations,
-                        key = { conversation ->
-                            conversation.threadId
-                        }
-                    ) { conversation ->
-
+                LazyColumn(Modifier.fillMaxSize().padding(paddingValues)) {
+                    item { SearchBar(searchText) { searchText = it } }
+                    items(filteredConversations, key = { it.threadId }) { conversation ->
+                        val selected = conversation.threadId in selectedIds
+                        val displayName = contactNames[HomeViewModel.normalizeAddress(conversation.address)] ?: conversation.address
                         ConversationCard(
                             conversation = conversation,
+                            displayName = displayName,
+                            selected = selected,
+                            isPinned = conversation.threadId in pinnedIds,
                             onClick = {
-                                val contactName =
-                                    contactNames[
-                                        HomeViewModel.normalizeAddress(
-                                            conversation.address
-                                        )
-                                    ] ?: conversation.address
-
-                                onConversationClick(
-                                    conversation.threadId,
-                                    contactName,
-                                    conversation.address
-                                )
+                                if (selectionMode) homeViewModel.toggleSelection(conversation.threadId)
+                                else onConversationClick(conversation.threadId, displayName, conversation.address)
                             },
-                            onLongClick = {
-                                conversationToArchive =
-                                    conversation
-                            }
+                            onLongClick = { homeViewModel.toggleSelection(conversation.threadId) }
                         )
                     }
-
-                    if (
-                        filteredConversations.isEmpty() &&
-                        !isLoading
-                    ) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillParentMaxSize(),
-                                contentAlignment =
-                                    Alignment.Center
-                            ) {
-                                Text(
-                                    text =
-                                        if (
-                                            searchText.isBlank()
-                                        ) {
-                                            "No messages found"
-                                        } else {
-                                            "No matching messages"
-                                        }
-                                )
-                            }
+                    if (filteredConversations.isEmpty() && !isLoading) item {
+                        Box(Modifier.fillParentMaxSize(), Alignment.Center) {
+                            Text(if (searchText.isBlank()) "No messages found" else "No matching messages")
                         }
                     }
                 }
             }
         }
     }
-    conversationToArchive?.let { conversation ->
 
-        AlertDialog(
-            onDismissRequest = {
-                conversationToArchive = null
-            },
-            title = {
-                Text("Conversation")
-            },
-            text = {
-                Text(
-                    "Choose an action for this conversation."
-                )
-            },
-            confirmButton = {
+    if (showDeleteDialog) AlertDialog(
+        onDismissRequest = { if (!deleting) showDeleteDialog = false },
+        title = { Text("Delete") },
+        text = { Text(if (selectedIds.size == 1) "Are you sure you want to delete this conversation?" else "Are you sure you want to delete these conversations?") },
+        confirmButton = {
+            TextButton(enabled = !deleting, onClick = {
+                showDeleteDialog = false
+                homeViewModel.deleteSelected()
+            }) { Text("Delete") }
+        },
+        dismissButton = { TextButton(enabled = !deleting, onClick = { showDeleteDialog = false }) { Text("Cancel") } }
+    )
 
-                TextButton(
-                    onClick = {
+    if (showExitDialog) AlertDialog(
+        onDismissRequest = { showExitDialog = false },
+        title = { Text("Are you sure you want to exit?") },
+        confirmButton = { TextButton(onClick = { showExitDialog = false; (context as? Activity)?.finish() }) { Text("Yes") } },
+        dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("No") } }
+    )
+}
 
-                        homeViewModel.archiveConversation(
-                            conversation
-                        )
-
-                        conversationToArchive = null
-                    }
-                ) {
-                    Text("Archive")
-                }
-            },
-            dismissButton = {
-
-                TextButton(
-                    onClick = {
-
-                        conversationToDelete =
-                            conversation
-
-                        conversationToArchive = null
-                    }
-                ) {
-                    Text("Delete")
-                }
-            }
-        )
+@Composable
+private fun DrawerHeader() {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Default.Sms, null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+        Column(Modifier.padding(start = 16.dp)) {
+            Text("Messages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("SMS conversations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
-    conversationToDelete?.let { conversation ->
+}
 
-        AlertDialog(
-            onDismissRequest = {
-                conversationToDelete = null
-            },
-            title = {
-                Text(
-                    text = "Delete Conversation"
-                )
-            },
-            text = {
-                Text(
-                    text =
-                        "Delete messages from ${conversation.address}?"
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = conversation.threadId !in
-                            deletingConversationIds,
-                    onClick = {
-                        homeViewModel.deleteConversation(
-                            conversation
-                        )
+@Composable
+private fun DrawerItem(label: String, icon: ImageVector, selected: Boolean = false, onClick: () -> Unit) {
+    NavigationDrawerItem(
+        label = { Text(label) },
+        selected = selected,
+        icon = { Icon(icon, null) },
+        onClick = onClick,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+    )
+}
 
-                        conversationToDelete = null
-                    }
-                ) {
-                    Text(
-                        text = "Delete"
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        conversationToDelete = null
-                    }
-                ) {
-                    Text(
-                        text = "Cancel"
-                    )
-                }
-            }
-        )
-    }
-
-    if (showExitDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showExitDialog = false
-            },
-            title = {
-                Text("Are you sure you want to exit?")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showExitDialog = false
-                        (context as? Activity)?.finish()
-                    }
-                ) {
-                    Text("Yes")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showExitDialog = false
-                    }
-                ) {
-                    Text("No")
-                }
-            }
-        )
-    }
+private fun navigateFromDrawer(
+    scope: kotlinx.coroutines.CoroutineScope,
+    drawerState: androidx.compose.material3.DrawerState,
+    navigate: (String) -> Unit,
+    route: String
+) {
+    scope.launch { drawerState.close(); navigate(route) }
 }

@@ -22,13 +22,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.Icon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.atul.messageapp.data.model.SmsConversation
-import com.atul.messageapp.utils.getContactName
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,18 +38,12 @@ import java.util.Locale
 @Composable
 fun ConversationCard(
     conversation: SmsConversation,
+    displayName: String,
+    selected: Boolean = false,
+    isPinned: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val context = LocalContext.current
-
-    val displayName = remember(conversation.address) {
-        getContactName(
-            context = context,
-            phoneNumber = conversation.address
-        )
-    }
-
     val formattedTime = remember(conversation.date) {
         SimpleDateFormat(
             "hh:mm a",
@@ -74,9 +70,11 @@ fun ConversationCard(
                 onLongClick = onLongClick
             ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme
-                .colorScheme
-                .surfaceVariant
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 1.dp
@@ -95,17 +93,23 @@ fun ConversationCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(
-                        MaterialTheme.colorScheme.primary
-                    ),
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = firstLetter,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Text(
+                        text = firstLetter,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
             Spacer(
@@ -163,6 +167,16 @@ fun ConversationCard(
                         .colorScheme
                         .onSurfaceVariant
                 )
+
+                if (isPinned) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Icon(
+                        imageVector = Icons.Default.PushPin,
+                        contentDescription = "Pinned",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 if (conversation.unreadCount > 0) {
                     Spacer(
