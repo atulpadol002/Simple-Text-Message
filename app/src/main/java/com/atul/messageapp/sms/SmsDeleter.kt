@@ -8,6 +8,7 @@ import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.StarredMessagesPreferences
 import com.atul.messageapp.data.repository.RecycleBinRepository
 import com.atul.messageapp.data.repository.SmsRepository
+import com.atul.messageapp.utils.getContactName
 
 class SmsDeleter(
     context: Context
@@ -46,12 +47,17 @@ class SmsDeleter(
                     threadId
                 ) ?: return false
 
+            val address = messages.firstOrNull()
+                ?.address
+                .orEmpty()
+
             val snapshot = DeletedConversation(
                 originalThreadId = threadId,
-                address = messages.firstOrNull()
-                    ?.address
-                    .orEmpty(),
-                cachedDisplayName = null,
+                address = address,
+                cachedDisplayName = getContactName(
+                    context = appContext,
+                    phoneNumber = address
+                ),
                 deletedAt = System.currentTimeMillis()
             )
 

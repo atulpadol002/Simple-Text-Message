@@ -11,6 +11,7 @@ import com.atul.messageapp.ui.feature.FeatureScreen
 import com.atul.messageapp.ui.home.HomeScreen
 import com.atul.messageapp.ui.newmessage.NewMessageScreen
 import com.atul.messageapp.ui.permission.PermissionScreen
+import com.atul.messageapp.ui.recyclebin.RecycleBinScreen
 import com.atul.messageapp.ui.splash.SplashScreen
 import com.atul.messageapp.ui.theme.ThemeScreen
 import com.atul.messageapp.ui.archive.ArchiveChatsScreen
@@ -215,10 +216,7 @@ fun AppNavigation(
         composable(
             Routes.RecycleBin.route
         ) {
-            FeatureScreen(
-                title = "Recycle Bin",
-                description =
-                    "Deleted conversations will appear here.",
+            RecycleBinScreen(
                 onBackClick = {
                     navController.popBackStack()
                 }
