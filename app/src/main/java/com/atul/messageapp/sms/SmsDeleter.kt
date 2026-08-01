@@ -3,8 +3,11 @@ package com.atul.messageapp.sms
 import android.content.Context
 import android.provider.Telephony
 import android.util.Log
+import com.atul.messageapp.data.model.DeletedConversation
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.StarredMessagesPreferences
+import com.atul.messageapp.data.repository.RecycleBinRepository
+import com.atul.messageapp.data.repository.SmsRepository
 
 class SmsDeleter(
     context: Context
@@ -19,6 +22,12 @@ class SmsDeleter(
     private val starredMessagesPreferences =
         StarredMessagesPreferences(appContext)
 
+    private val smsRepository =
+        SmsRepository(appContext)
+
+    private val recycleBinRepository =
+        RecycleBinRepository(appContext)
+
     fun deleteConversation(
         threadId: Long
     ): Boolean {
@@ -27,12 +36,34 @@ class SmsDeleter(
             return false
         }
 
+        var createdSnapshotId: Long? = null
+        var providerDeleteCompleted = false
+
         return try {
 
-            val messageIds =
-                getMessageIdsForThread(
+            val messages =
+                smsRepository.getConversationSnapshotMessages(
                     threadId
                 ) ?: return false
+
+            val snapshot = DeletedConversation(
+                originalThreadId = threadId,
+                address = messages.firstOrNull()
+                    ?.address
+                    .orEmpty(),
+                cachedDisplayName = null,
+                deletedAt = System.currentTimeMillis()
+            )
+
+            val snapshotId =
+                recycleBinRepository
+                    .saveConversationSnapshotAndGetId(
+                        conversation = snapshot,
+                        messages = messages
+                    )
+                    ?: return false
+
+            createdSnapshotId = snapshotId
 
             val deletedRows =
                 appContext.contentResolver.delete(
@@ -49,8 +80,12 @@ class SmsDeleter(
             )
 
             if (deletedRows <= 0) {
+                removeSnapshot(snapshotId)
+
                 return false
             }
+
+            providerDeleteCompleted = true
 
             archivePreferences.unarchiveConversation(
                 threadId
@@ -58,7 +93,9 @@ class SmsDeleter(
 
             starredMessagesPreferences
                 .removeStarredMessageIds(
-                    messageIds
+                    messages.map { message ->
+                        message.originalMessageId
+                    }.toSet()
                 )
 
             true
@@ -66,6 +103,10 @@ class SmsDeleter(
         } catch (
             exception: SecurityException
         ) {
+
+            if (!providerDeleteCompleted) {
+                createdSnapshotId?.let(::removeSnapshot)
+            }
 
             Log.e(
                 "SmsDeleter",
@@ -79,6 +120,10 @@ class SmsDeleter(
             exception: Exception
         ) {
 
+            if (!providerDeleteCompleted) {
+                createdSnapshotId?.let(::removeSnapshot)
+            }
+
             Log.e(
                 "SmsDeleter",
                 "Delete conversation failed",
@@ -89,42 +134,21 @@ class SmsDeleter(
         }
     }
 
-    private fun getMessageIdsForThread(
-        threadId: Long
-    ): Set<Long>? {
-
-        val messageIds =
-            mutableSetOf<Long>()
-
-        val cursor =
-            appContext.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf(
-                    Telephony.Sms._ID
-                ),
-                "${Telephony.Sms.THREAD_ID}=?",
-                arrayOf(
-                    threadId.toString()
-                ),
-                null
-            ) ?: return null
-
-        cursor.use {
-
-            val messageIdIndex =
-                it.getColumnIndexOrThrow(
-                    Telephony.Sms._ID
+    private fun removeSnapshot(
+        recycleBinId: Long
+    ) {
+        try {
+            recycleBinRepository
+                .deleteSnapshotPermanently(
+                    recycleBinId
                 )
-
-            while (it.moveToNext()) {
-                messageIds.add(
-                    it.getLong(
-                        messageIdIndex
-                    )
-                )
-            }
+        } catch (exception: Exception) {
+            Log.e(
+                "SmsDeleter",
+                "Failed to remove Recycle Bin snapshot",
+                exception
+            )
         }
-
-        return messageIds
     }
+
 }

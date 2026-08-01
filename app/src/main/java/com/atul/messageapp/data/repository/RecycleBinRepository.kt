@@ -37,7 +37,15 @@ class RecycleBinRepository(
     fun saveConversationSnapshot(
         conversation: DeletedConversation,
         messages: List<DeletedMessage>
-    ): Boolean {
+    ): Boolean = saveConversationSnapshotAndGetId(
+        conversation = conversation,
+        messages = messages
+    ) != null
+
+    fun saveConversationSnapshotAndGetId(
+        conversation: DeletedConversation,
+        messages: List<DeletedMessage>
+    ): Long? {
         if (
             messages.isEmpty() ||
             messages.any { message ->
@@ -45,7 +53,7 @@ class RecycleBinRepository(
                         conversation.originalThreadId
             }
         ) {
-            return false
+            return null
         }
 
         val database = databaseHelper.writableDatabase
@@ -61,7 +69,7 @@ class RecycleBinRepository(
             )
 
             if (recycleBinId == -1L) {
-                false
+                null
             } else {
                 messages.forEach { message ->
                     val insertedId = database.insertOrThrow(
@@ -74,11 +82,11 @@ class RecycleBinRepository(
                 }
 
                 database.setTransactionSuccessful()
-                true
+                recycleBinId
             }
         } catch (exception: Exception) {
             exception.printStackTrace()
-            false
+            null
         } finally {
             database.endTransaction()
         }
