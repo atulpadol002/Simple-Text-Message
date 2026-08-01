@@ -4,7 +4,9 @@ import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Telephony
+import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 
 class SmsReceiver : BroadcastReceiver() {
@@ -107,10 +109,30 @@ class SmsReceiver : BroadcastReceiver() {
                     )
                 }
 
-            context.contentResolver.insert(
-                Telephony.Sms.Inbox.CONTENT_URI,
-                values
-            )
+            val insertedUri =
+                context.contentResolver.insert(
+                    Telephony.Sms.Inbox.CONTENT_URI,
+                    values
+                )
+
+            if (insertedUri == null) {
+                return
+            }
+
+            val threadId =
+                resolveThreadId(
+                    context = context,
+                    insertedUri = insertedUri
+                )
+
+            if (threadId != null) {
+
+                ArchivePreferences(
+                    context.applicationContext
+                ).unarchiveConversation(
+                    threadId
+                )
+            }
 
             SmsEventBus.notifySmsReceived()
 
@@ -119,6 +141,45 @@ class SmsReceiver : BroadcastReceiver() {
         ) {
 
             exception.printStackTrace()
+        }
+    }
+
+    private fun resolveThreadId(
+        context: Context,
+        insertedUri: Uri
+    ): Long? {
+
+        return try {
+
+            context.contentResolver.query(
+                insertedUri,
+                arrayOf(
+                    Telephony.Sms.THREAD_ID
+                ),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+
+                if (!cursor.moveToFirst()) {
+                    return@use null
+                }
+
+                cursor.getLong(
+                    cursor.getColumnIndexOrThrow(
+                        Telephony.Sms.THREAD_ID
+                    )
+                ).takeIf { threadId ->
+                    threadId > 0L
+                }
+            }
+
+        } catch (
+            exception: Exception
+        ) {
+
+            exception.printStackTrace()
+            null
         }
     }
 }

@@ -46,7 +46,30 @@ class ArchivePreferences(
             getArchivedThreadIds()
                 .toMutableSet()
 
-        archivedIds.remove(threadId)
+        if (!archivedIds.remove(threadId)) {
+            return
+        }
+
+        saveArchivedThreadIds(
+            archivedIds
+        )
+    }
+
+    fun removeArchivedThreadIds(
+        threadIds: Set<Long>
+    ) {
+
+        if (threadIds.isEmpty()) {
+            return
+        }
+
+        val archivedIds =
+            getArchivedThreadIds()
+                .toMutableSet()
+
+        if (!archivedIds.removeAll(threadIds)) {
+            return
+        }
 
         saveArchivedThreadIds(
             archivedIds

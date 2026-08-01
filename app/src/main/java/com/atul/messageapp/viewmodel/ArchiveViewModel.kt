@@ -64,8 +64,24 @@ class ArchiveViewModel(
                             archivePreferences
                                 .getArchivedThreadIds()
 
-                        smsRepository
-                            .getConversations()
+                        val providerConversations =
+                            smsRepository
+                                .getConversations()
+
+                        val validProviderThreadIds =
+                            providerConversations
+                                .map { conversation ->
+                                    conversation.threadId
+                                }
+                                .toSet()
+
+                        archivePreferences
+                            .removeArchivedThreadIds(
+                                archivedThreadIds -
+                                        validProviderThreadIds
+                            )
+
+                        providerConversations
                             .filter { conversation ->
                                 archivedThreadIds.contains(
                                     conversation.threadId
