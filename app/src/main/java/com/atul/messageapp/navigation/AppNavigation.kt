@@ -36,10 +36,21 @@ fun AppNavigation(
             Routes.Splash.route
         ) {
             SplashScreen(
-                onNext = {
+                onPermissionFlow = {
                     navController.navigate(
                         Routes.Permission.route
                     )
+                },
+                onDirectHome = {
+                    navController.navigate(
+                        Routes.Home.route
+                    ) {
+                        popUpTo(
+                            Routes.Splash.route
+                        ) {
+                            inclusive = true
+                        }
+                    }
                 }
             )
         }
@@ -53,7 +64,7 @@ fun AppNavigation(
                         Routes.Home.route
                     ) {
                         popUpTo(
-                            Routes.Permission.route
+                            Routes.Splash.route
                         ) {
                             inclusive = true
                         }

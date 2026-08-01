@@ -6,13 +6,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.atul.messageapp.sms.DefaultSmsManager
+import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
-    onNext: () -> Unit
+    onPermissionFlow: () -> Unit,
+    onDirectHome: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    val isDefaultSmsApp = remember(context) {
+        DefaultSmsManager(context).isDefaultSmsApp()
+    }
+
+    LaunchedEffect(isDefaultSmsApp) {
+        if (isDefaultSmsApp) {
+            delay(500)
+            onDirectHome()
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -23,14 +42,16 @@ fun SplashScreen(
             text = "Message App"
         )
 
-        Button(
-            onClick = {
-                onNext()
+        if (!isDefaultSmsApp) {
+            Button(
+                onClick = {
+                    onPermissionFlow()
+                }
+            ) {
+                Text(
+                    text = "Get Started"
+                )
             }
-        ) {
-            Text(
-                text = "Get Started"
-            )
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.atul.messageapp.ui.home
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -87,6 +89,10 @@ fun HomeScreen(
         mutableStateOf("")
     }
 
+    var showExitDialog by remember {
+        mutableStateOf(false)
+    }
+
     var conversationToDelete by remember {
         mutableStateOf<SmsConversation?>(null)
     }
@@ -94,10 +100,23 @@ fun HomeScreen(
         mutableStateOf<SmsConversation?>(null)
     }
 
+    val contactNamesByThreadId =
+        remember(conversations) {
+            conversations.associate { conversation ->
+                conversation.threadId to
+                        getContactName(
+                            context = context,
+                            phoneNumber =
+                                conversation.address
+                        )
+            }
+        }
+
     val filteredConversations =
         remember(
             conversations,
-            searchText
+            searchText,
+            contactNamesByThreadId
         ) {
             if (searchText.isBlank()) {
                 conversations
@@ -105,11 +124,9 @@ fun HomeScreen(
                 conversations.filter { conversation ->
 
                     val contactName =
-                        getContactName(
-                            context = context,
-                            phoneNumber =
-                                conversation.address
-                        )
+                        contactNamesByThreadId[
+                            conversation.threadId
+                        ].orEmpty()
 
                     contactName.contains(
                         searchText,
@@ -149,6 +166,10 @@ fun HomeScreen(
                 observer
             )
         }
+    }
+
+    BackHandler {
+        showExitDialog = true
     }
 
     ModalNavigationDrawer(
@@ -332,7 +353,18 @@ fun HomeScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    Column(
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator()
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Text("Syncing messages...")
+                    }
                 }
 
             } else {
@@ -499,6 +531,36 @@ fun HomeScreen(
                     Text(
                         text = "Cancel"
                     )
+                }
+            }
+        )
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showExitDialog = false
+            },
+            title = {
+                Text("Are you sure you want to exit?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitDialog = false
+                        (context as? Activity)?.finish()
+                    }
+                ) {
+                    Text("Yes")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showExitDialog = false
+                    }
+                ) {
+                    Text("No")
                 }
             }
         )
