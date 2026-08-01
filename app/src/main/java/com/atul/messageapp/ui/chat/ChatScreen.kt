@@ -47,6 +47,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,6 +72,9 @@ import com.atul.messageapp.ui.components.ScheduledMessageEditorDialog
 import com.atul.messageapp.ui.components.ScheduledMessageOptionsDialog
 import com.atul.messageapp.viewmodel.ChatViewModel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -137,6 +141,9 @@ fun ChatScreen(
 
     val lifecycleOwner =
         LocalLifecycleOwner.current
+
+    val coroutineScope =
+        rememberCoroutineScope()
 
     val keyboardController =
         LocalSoftwareKeyboardController.current
@@ -217,16 +224,15 @@ fun ChatScreen(
                     Lifecycle.Event.ON_RESUME
                 ) {
 
-                    currentContactName =
-                        ContactUtils.getContactName(
-                            context = context,
-                            phoneNumber = phoneNumber
-                        )
-
-                    chatViewModel
-                        .loadScheduledMessages(
-                            phoneNumber
-                        )
+                    coroutineScope.launch {
+                        currentContactName =
+                            withContext(Dispatchers.IO) {
+                                ContactUtils.getContactName(
+                                    context = context,
+                                    phoneNumber = phoneNumber
+                                )
+                            }
+                    }
                 }
             }
 
@@ -258,9 +264,15 @@ fun ChatScreen(
 
         if (totalItems > 0) {
 
-            listState.animateScrollToItem(
-                index = totalItems - 1
-            )
+            if (messages.size > 100) {
+                listState.scrollToItem(
+                    index = totalItems - 1
+                )
+            } else {
+                listState.animateScrollToItem(
+                    index = totalItems - 1
+                )
+            }
         }
     }
 

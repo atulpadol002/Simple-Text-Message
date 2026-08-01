@@ -152,8 +152,6 @@ class ChatViewModel(
         currentPhoneNumber =
             phoneNumber
 
-        loadStarredMessageIds()
-
         loadScheduledMessages(
             phoneNumber
         )
@@ -162,16 +160,18 @@ class ChatViewModel(
             return
         }
 
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.markThreadAsRead(
+                conversationId
+            )
+        }
+
         viewModelScope.launch {
 
             val result =
                 withContext(
                     Dispatchers.IO
                 ) {
-
-                    repository.markThreadAsRead(
-                        conversationId
-                    )
 
                     repository.getMessages(
                         conversationId

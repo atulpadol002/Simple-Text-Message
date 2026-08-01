@@ -18,7 +18,14 @@ class MessageDataSource(
 
             val cursor = context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
-                null,
+                arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.READ
+                ),
                 "${Telephony.Sms.THREAD_ID}=?",
                 arrayOf(conversationId.toString()),
                 "${Telephony.Sms.DATE} ASC"
