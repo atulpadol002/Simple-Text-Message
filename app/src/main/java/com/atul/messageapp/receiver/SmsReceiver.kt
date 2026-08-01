@@ -8,6 +8,9 @@ import android.net.Uri
 import android.provider.Telephony
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class SmsReceiver : BroadcastReceiver() {
 
@@ -67,7 +70,10 @@ class SmsReceiver : BroadcastReceiver() {
             smsMessages.first()
                 .timestampMillis
 
-        try {
+        val pendingResult = goAsync()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
 
             val values =
                 ContentValues().apply {
@@ -116,7 +122,7 @@ class SmsReceiver : BroadcastReceiver() {
                 )
 
             if (insertedUri == null) {
-                return
+                return@launch
             }
 
             val threadId =
@@ -136,11 +142,14 @@ class SmsReceiver : BroadcastReceiver() {
 
             SmsEventBus.notifySmsReceived()
 
-        } catch (
-            exception: Exception
-        ) {
+            } catch (
+                exception: Exception
+            ) {
 
-            exception.printStackTrace()
+                exception.printStackTrace()
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 

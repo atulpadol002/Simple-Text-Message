@@ -12,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.atul.messageapp.sms.DefaultSmsManager
-import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
@@ -27,7 +26,6 @@ fun SplashScreen(
 
     LaunchedEffect(isDefaultSmsApp) {
         if (isDefaultSmsApp) {
-            delay(500)
             onDirectHome()
         }
     }
