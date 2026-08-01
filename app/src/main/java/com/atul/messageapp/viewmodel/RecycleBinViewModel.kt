@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.atul.messageapp.data.model.DeletedConversation
 import com.atul.messageapp.data.repository.RecycleBinRepository
+import com.atul.messageapp.data.repository.SmsRepository
+import com.atul.messageapp.sms.DefaultSmsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +21,12 @@ class RecycleBinViewModel(
     private val recycleBinRepository =
         RecycleBinRepository(application)
 
+    private val smsRepository =
+        SmsRepository(application)
+
+    private val defaultSmsManager =
+        DefaultSmsManager(application)
+
     private val _deletedConversations =
         MutableStateFlow<List<DeletedConversation>>(emptyList())
 
@@ -29,6 +37,18 @@ class RecycleBinViewModel(
 
     val isLoading: StateFlow<Boolean> =
         _isLoading.asStateFlow()
+
+    private val _restoringConversationIds =
+        MutableStateFlow<Set<Long>>(emptySet())
+
+    val restoringConversationIds: StateFlow<Set<Long>> =
+        _restoringConversationIds.asStateFlow()
+
+    private val _processingConversationIds =
+        MutableStateFlow<Set<Long>>(emptySet())
+
+    val processingConversationIds: StateFlow<Set<Long>> =
+        _processingConversationIds.asStateFlow()
 
     init {
         loadDeletedConversations()
@@ -54,5 +74,96 @@ class RecycleBinViewModel(
                 _isLoading.value = false
             }
         }
+    }
+
+    fun restoreConversation(
+        recycleBinId: Long
+    ) {
+        if (recycleBinId in _processingConversationIds.value) {
+            return
+        }
+
+        _processingConversationIds.value += recycleBinId
+        _restoringConversationIds.value += recycleBinId
+
+        viewModelScope.launch {
+            try {
+                val restoreCompleted = withContext(Dispatchers.IO) {
+                    restoreConversationOnIo(recycleBinId)
+                }
+
+                if (restoreCompleted) {
+                    loadDeletedConversations()
+                }
+            } catch (exception: Exception) {
+                exception.printStackTrace()
+            } finally {
+                _restoringConversationIds.value -= recycleBinId
+                _processingConversationIds.value -= recycleBinId
+            }
+        }
+    }
+
+    fun deleteConversationPermanently(
+        recycleBinId: Long
+    ) {
+        if (recycleBinId in _processingConversationIds.value) {
+            return
+        }
+
+        _processingConversationIds.value += recycleBinId
+
+        viewModelScope.launch {
+            try {
+                val deleted = withContext(Dispatchers.IO) {
+                    recycleBinRepository
+                        .deleteSnapshotPermanently(recycleBinId)
+                }
+
+                if (deleted) {
+                    loadDeletedConversations()
+                }
+            } catch (exception: Exception) {
+                exception.printStackTrace()
+            } finally {
+                _processingConversationIds.value -= recycleBinId
+            }
+        }
+    }
+
+    private fun restoreConversationOnIo(
+        recycleBinId: Long
+    ): Boolean {
+        if (!defaultSmsManager.isDefaultSmsApp()) {
+            return false
+        }
+
+        val messages = recycleBinRepository
+            .getDeletedMessages(recycleBinId)
+
+        for (message in messages) {
+            if (message.restored) {
+                continue
+            }
+
+            val existingMessage =
+                smsRepository.restoredMessageExists(message)
+                    ?: return false
+
+            val restored = existingMessage ||
+                    smsRepository.restoreMessage(message)
+
+            if (
+                !restored ||
+                !recycleBinRepository.markMessageRestored(
+                    message.localMessageId
+                )
+            ) {
+                return false
+            }
+        }
+
+        return recycleBinRepository
+            .deleteSnapshotIfRestoreComplete(recycleBinId)
     }
 }
