@@ -7,6 +7,7 @@ import com.atul.messageapp.data.model.SmsConversation
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.receiver.SmsEventBus
+import com.atul.messageapp.utils.getContactName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,12 @@ class ArchiveViewModel(
 
     val isLoading: StateFlow<Boolean> =
         _isLoading.asStateFlow()
+
+    private val _selectedThreadIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedThreadIds: StateFlow<Set<Long>> = _selectedThreadIds.asStateFlow()
+
+    private val _contactNames = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val contactNames: StateFlow<Map<Long, String>> = _contactNames.asStateFlow()
 
     private var loadJob:
             Job? = null
@@ -90,15 +97,15 @@ class ArchiveViewModel(
                                 }
                                 .toSet()
 
+                        val archivedConversations = providerConversations
+                            .filter { it.threadId in archivedThreadIds }
+
                         Triple(
                             archivedThreadIds,
                             validProviderThreadIds,
-                            providerConversations
-                                .filter { conversation ->
-                                    archivedThreadIds.contains(
-                                        conversation.threadId
-                                    )
-                                }
+                            archivedConversations to archivedConversations.associate {
+                                it.threadId to getContactName(getApplication(), it.address)
+                            }
                         )
                     }
 
@@ -110,8 +117,8 @@ class ArchiveViewModel(
                                     result.second
                         )
 
-                    _conversations.value =
-                        result.third
+                    _conversations.value = result.third.first
+                    _contactNames.value = result.third.second
                 }
 
             } catch (
@@ -163,5 +170,23 @@ class ArchiveViewModel(
                 it.threadId ==
                         conversation.threadId
             }
+    }
+
+    fun toggleSelection(threadId: Long) {
+        _selectedThreadIds.value = _selectedThreadIds.value.toMutableSet().apply {
+            if (!add(threadId)) remove(threadId)
+        }
+    }
+
+    fun clearSelection() {
+        _selectedThreadIds.value = emptySet()
+    }
+
+    fun unarchiveSelected() {
+        val selected = _selectedThreadIds.value
+        if (selected.isEmpty()) return
+        selected.forEach(archivePreferences::unarchiveConversation)
+        _conversations.value = _conversations.value.filterNot { it.threadId in selected }
+        clearSelection()
     }
 }
