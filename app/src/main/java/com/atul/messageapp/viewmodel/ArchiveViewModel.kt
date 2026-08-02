@@ -89,6 +89,7 @@ class ArchiveViewModel(
     }
 
     fun loadArchivedConversations() {
+        applyCachedPresentations()
         if (loadJob?.isActive == true) {
             reloadPending = true
             return
@@ -169,6 +170,17 @@ class ArchiveViewModel(
                 }
             }
         }
+    }
+
+    private fun applyCachedPresentations() {
+        val cached = _conversations.value.mapNotNull { conversation ->
+            contactResolver.getCached(conversation.address)?.let {
+                conversation.threadId to it
+            }
+        }.toMap()
+        if (cached.isEmpty()) return
+        _contactPresentations.value = _contactPresentations.value + cached
+        _contactNames.value = _contactNames.value + cached.mapValues { it.value.displayName }
     }
 
     fun unarchiveConversation(

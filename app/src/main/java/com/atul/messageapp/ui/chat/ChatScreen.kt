@@ -185,6 +185,9 @@ fun ChatScreen(
     var showDeleteMessagesDialog by remember { mutableStateOf(false) }
     var isDeletingMessages by remember { mutableStateOf(false) }
     val contactAvatar by chatViewModel.contactAvatar.collectAsState()
+    val routeContactAvatar = contactAvatar.takeIf {
+        it.conversationId == conversationId && it.phoneNumber == phoneNumber
+    }
     val isDeletingConversation by chatViewModel.isDeletingConversation.collectAsState()
 
     val selectedScheduledMessage =
@@ -291,6 +294,12 @@ fun ChatScreen(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            searchScrollJob?.cancel()
+        }
+    }
+
     LaunchedEffect(
         conversationId,
         phoneNumber
@@ -298,7 +307,8 @@ fun ChatScreen(
 
         chatViewModel.loadMessages(
             conversationId = conversationId,
-            phoneNumber = phoneNumber
+            phoneNumber = phoneNumber,
+            initialDisplayName = contactName
         )
 
         SmsEventBus.events.collectLatest {
@@ -488,7 +498,7 @@ fun ChatScreen(
                             contentAlignment =
                                 Alignment.Center
                         ) {
-                            val photo = contactAvatar.photo
+                            val photo = routeContactAvatar?.photo
                             if (photo != null) {
                                 Image(
                                     bitmap = photo.asImageBitmap(),
@@ -498,7 +508,7 @@ fun ChatScreen(
                                 )
                             } else {
                                 val avatarText = meaningfulInitial(
-                                    contactAvatar.displayName.ifBlank { contactName },
+                                    routeContactAvatar?.displayName.orEmpty().ifBlank { contactName },
                                     phoneNumber
                                 )
                                 Text(
@@ -522,7 +532,7 @@ fun ChatScreen(
 
                             Text(
                                 text =
-                                    contactAvatar.displayName.ifBlank { contactName },
+                                    routeContactAvatar?.displayName.orEmpty().ifBlank { contactName },
                                 color =
                                     MaterialTheme
                                         .colorScheme

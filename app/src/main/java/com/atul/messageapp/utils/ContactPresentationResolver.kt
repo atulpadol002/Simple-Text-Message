@@ -11,11 +11,15 @@ data class ContactPresentation(val displayName: String, val photo: Bitmap?)
 
 class ContactPresentationResolver(context: Context) {
     private val appContext = context.applicationContext
-    private val cache = mutableMapOf<String, ContactPresentation>()
+
+    fun getCached(address: String): ContactPresentation? {
+        val key = cacheKey(address)
+        return synchronized(cacheLock) { presentationCache[key] }
+    }
 
     fun resolve(address: String): ContactPresentation {
-        val key = PhoneNumberUtils.normalizeNumber(address).ifBlank { address.trim() }
-        synchronized(cache) { cache[key]?.let { return it } }
+        val key = cacheKey(address)
+        synchronized(cacheLock) { presentationCache[key]?.let { return it } }
         var name = address
         var photo: Bitmap? = null
         try {
@@ -42,6 +46,25 @@ class ContactPresentationResolver(context: Context) {
         } catch (_: Exception) {
             photo = null
         }
-        return ContactPresentation(name, photo).also { synchronized(cache) { cache[key] = it } }
+        return ContactPresentation(name, photo).also {
+            synchronized(cacheLock) { presentationCache[key] = it }
+        }
+    }
+
+    companion object {
+        private const val MAX_CACHE_ENTRIES = 128
+        private val cacheLock = Any()
+        private val presentationCache = object : LinkedHashMap<String, ContactPresentation>(
+            MAX_CACHE_ENTRIES,
+            0.75f,
+            true
+        ) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, ContactPresentation>?
+            ): Boolean = size > MAX_CACHE_ENTRIES
+        }
+
+        private fun cacheKey(address: String): String =
+            PhoneNumberUtils.normalizeNumber(address).ifBlank { address.trim() }
     }
 }

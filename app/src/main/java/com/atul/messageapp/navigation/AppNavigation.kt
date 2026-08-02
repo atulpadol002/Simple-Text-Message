@@ -1,8 +1,12 @@
 package com.atul.messageapp.navigation
 
 import android.net.Uri
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -37,9 +41,15 @@ fun AppNavigation(
             ?.destination
             ?.route
 
+    val navigationInProgress = remember { mutableStateOf(false) }
+
     NavHost(
         navController = navController,
-        startDestination = Routes.Splash.route
+        startDestination = Routes.Splash.route,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
     ) {
 
         composable(
@@ -88,6 +98,8 @@ fun AppNavigation(
         ) {
             HomeScreen(
                 isActive = currentRoute == Routes.Home.route,
+                navigationInProgress = navigationInProgress.value,
+                onHomeResumed = { navigationInProgress.value = false },
                 onNewMessageClick = {
                     if (navController.currentDestination?.route == Routes.Home.route) {
                         navController.navigate(Routes.NewMessage.route) {
@@ -100,14 +112,20 @@ fun AppNavigation(
                         name,
                         phoneNumber ->
 
-                    navController.navigate(
-                        "chat/$conversationId/" +
-                                "${Uri.encode(name)}/" +
-                                Uri.encode(phoneNumber)
-                    )
+                    if (navController.currentDestination?.route == Routes.Home.route) {
+                        navigationInProgress.value = true
+                        navController.navigate(
+                            "chat/$conversationId/" +
+                                    "${Uri.encode(name)}/" +
+                                    Uri.encode(phoneNumber)
+                        )
+                    }
                 },
                 onDrawerNavigate = { route ->
-                    navController.navigate(route)
+                    if (navController.currentDestination?.route == Routes.Home.route) {
+                        navigationInProgress.value = true
+                        navController.navigate(route)
+                    }
                 }
             )
         }
@@ -145,12 +163,27 @@ fun AppNavigation(
             Routes.Chat.route
         ) { backStackEntry ->
 
-            BackHandler {
-                navController.popBackStack(
-                    Routes.Home.route,
-                    inclusive = false
-                )
+            val backHandled = remember(backStackEntry) { mutableStateOf(false) }
+            fun leaveChat(popToHome: Boolean) {
+                if (
+                    backHandled.value ||
+                    navController.currentDestination?.route != Routes.Chat.route
+                ) return
+
+                backHandled.value = true
+                navigationInProgress.value = true
+                val popped = if (popToHome) {
+                    navController.popBackStack(Routes.Home.route, inclusive = false)
+                } else {
+                    navController.popBackStack()
+                }
+                if (!popped) {
+                    navigationInProgress.value = false
+                    backHandled.value = false
+                }
             }
+
+            BackHandler(enabled = !backHandled.value) { leaveChat(popToHome = false) }
 
             val conversationId =
                 backStackEntry.arguments
@@ -174,15 +207,8 @@ fun AppNavigation(
                 contactName = name,
                 phoneNumber = phoneNumber,
                 conversationId = conversationId,
-                onBackClick = {
-                    navController.popBackStack()
-                },
-                onConversationDeleted = {
-                    navController.popBackStack(
-                        Routes.Home.route,
-                        inclusive = false
-                    )
-                }
+                onBackClick = { leaveChat(popToHome = false) },
+                onConversationDeleted = { leaveChat(popToHome = true) }
             )
         }
 

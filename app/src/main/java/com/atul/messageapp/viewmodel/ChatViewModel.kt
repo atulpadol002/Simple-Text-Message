@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 
 class ChatViewModel(
     application: Application
@@ -57,7 +58,12 @@ class ChatViewModel(
     private val smsDeleter = SmsDeleter(appContext)
     private val contactPresentationResolver = ContactPresentationResolver(appContext)
 
-    data class ContactAvatarState(val displayName: String = "", val photo: Bitmap? = null)
+    data class ContactAvatarState(
+        val conversationId: Long = 0L,
+        val phoneNumber: String = "",
+        val displayName: String = "",
+        val photo: Bitmap? = null
+    )
     private val _contactAvatar = MutableStateFlow(ContactAvatarState())
     val contactAvatar: StateFlow<ContactAvatarState> = _contactAvatar.asStateFlow()
     private val _isDeletingConversation = MutableStateFlow(false)
@@ -97,6 +103,7 @@ class ChatViewModel(
 
     private var refreshJob:
             Job? = null
+    private var avatarJob: Job? = null
 
     private var pendingThreadIdMessageId:
             Long? = null
@@ -152,7 +159,8 @@ class ChatViewModel(
 
     fun loadMessages(
         conversationId: Long,
-        phoneNumber: String
+        phoneNumber: String,
+        initialDisplayName: String
     ) {
 
         if (
@@ -167,7 +175,7 @@ class ChatViewModel(
         currentPhoneNumber =
             phoneNumber
 
-        loadContactAvatar(phoneNumber)
+        loadContactAvatar(conversationId, phoneNumber, initialDisplayName)
 
         loadScheduledMessages(
             phoneNumber
@@ -740,12 +748,39 @@ class ChatViewModel(
         return changed
     }
 
-    private fun loadContactAvatar(phoneNumber: String) {
-        viewModelScope.launch {
-            _contactAvatar.value = withContext(Dispatchers.IO) {
-                contactPresentationResolver.resolve(phoneNumber).let {
-                    ContactAvatarState(it.displayName, it.photo)
+    private fun loadContactAvatar(
+        conversationId: Long,
+        phoneNumber: String,
+        initialDisplayName: String
+    ) {
+        avatarJob?.cancel()
+        val cachedPresentation = contactPresentationResolver.getCached(phoneNumber)
+        _contactAvatar.value = ContactAvatarState(
+            conversationId = conversationId,
+            phoneNumber = phoneNumber,
+            displayName = cachedPresentation?.displayName
+                ?: initialDisplayName.ifBlank { phoneNumber },
+            photo = cachedPresentation?.photo
+        )
+        avatarJob = viewModelScope.launch {
+            try {
+                val presentation = withContext(Dispatchers.IO) {
+                    contactPresentationResolver.resolve(phoneNumber)
                 }
+                val currentAvatar = _contactAvatar.value
+                if (
+                    currentAvatar.conversationId == conversationId &&
+                    currentAvatar.phoneNumber == phoneNumber
+                ) {
+                    _contactAvatar.value = ContactAvatarState(
+                        conversationId = conversationId,
+                        phoneNumber = phoneNumber,
+                        displayName = presentation.displayName,
+                        photo = presentation.photo
+                    )
+                }
+            } catch (exception: CancellationException) {
+                throw exception
             }
         }
     }
@@ -761,6 +796,8 @@ class ChatViewModel(
         viewModelScope.launch {
             val deleted = try {
                 withContext(Dispatchers.IO) { smsDeleter.deleteConversation(resolvedThreadId) }
+            } catch (exception: CancellationException) {
+                throw exception
             } catch (_: Exception) {
                 false
             } finally {
@@ -1134,6 +1171,7 @@ class ChatViewModel(
     private fun scheduleProviderRefresh() {
 
         refreshJob?.cancel()
+        avatarJob?.cancel()
 
         refreshJob =
             viewModelScope.launch {

@@ -112,6 +112,10 @@ class HomeViewModel(
     private var hasCompletedInitialLoad = cachedHomeRaw != null
 
     private var stateVersion = 0L
+    private var scrollAfterReload = false
+    private var nextScrollRequestId = 0L
+    private val _scrollToTopRequestId = MutableStateFlow<Long?>(null)
+    val scrollToTopRequestId: StateFlow<Long?> = _scrollToTopRequestId.asStateFlow()
 
     init {
         observeIncomingSms()
@@ -123,6 +127,13 @@ class HomeViewModel(
 
             SmsEventBus.events
                 .collectLatest { event ->
+                    if (
+                        event == SmsEventBus.Event.ConversationUnblocked ||
+                        event == SmsEventBus.Event.ConversationUnarchived ||
+                        event == SmsEventBus.Event.ConversationRestored
+                    ) {
+                        scrollAfterReload = true
+                    }
                     when (event) {
                         SmsEventBus.Event.SmsChanged,
                         SmsEventBus.Event.ConversationDeleted,
@@ -135,6 +146,8 @@ class HomeViewModel(
     }
 
     fun loadConversations() {
+
+        applyCachedPresentations()
 
         if (loadJob?.isActive == true) {
             reloadPending = true
@@ -214,6 +227,10 @@ class HomeViewModel(
                     _pinnedThreadIds.value = result.pinnedIds
                     _contactPresentations.value = result.presentations
                     persistVisibleState()
+                    if (scrollAfterReload && !reloadPending) {
+                        scrollAfterReload = false
+                        _scrollToTopRequestId.value = ++nextScrollRequestId
+                    }
                 } else {
                     reloadPending = true
                 }
@@ -325,6 +342,22 @@ class HomeViewModel(
         _conversations.value = _conversations.value.filterNot { it.threadId in selected }
         persistVisibleState()
         clearSelection()
+    }
+
+    private fun applyCachedPresentations() {
+        val cached = _conversations.value.mapNotNull { conversation ->
+            val key = normalizeAddress(conversation.address)
+            contactResolver.getCached(conversation.address)?.let { key to it }
+        }.toMap()
+        if (cached.isEmpty()) return
+        _contactPresentations.value = _contactPresentations.value + cached
+        _contactNames.value = _contactNames.value + cached.mapValues { it.value.displayName }
+    }
+
+    fun consumeScrollToTopRequest(requestId: Long) {
+        if (_scrollToTopRequestId.value == requestId) {
+            _scrollToTopRequestId.value = null
+        }
     }
 
     fun blockSelected() {

@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -69,6 +70,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -78,11 +80,14 @@ import com.atul.messageapp.ui.components.ConversationCard
 import com.atul.messageapp.ui.components.SearchBar
 import com.atul.messageapp.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     isActive: Boolean,
+    navigationInProgress: Boolean,
+    onHomeResumed: () -> Unit,
     onNewMessageClick: () -> Unit,
     onConversationClick: (Long, String, String) -> Unit,
     onDrawerNavigate: (String) -> Unit
@@ -94,6 +99,10 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var drawerJob by remember { mutableStateOf<Job?>(null) }
+    var lifecycleState by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState)
+    }
     val listState = rememberLazyListState()
     val conversations by homeViewModel.conversations.collectAsState()
     val isLoading by homeViewModel.isLoading.collectAsState()
@@ -102,11 +111,25 @@ fun HomeScreen(
     val selectedIds by homeViewModel.selectedThreadIds.collectAsState()
     val pinnedIds by homeViewModel.pinnedThreadIds.collectAsState()
     val deleting by homeViewModel.isDeletingSelection.collectAsState()
+    val scrollToTopRequestId by homeViewModel.scrollToTopRequestId.collectAsState()
     var searchText by remember { mutableStateOf("") }
     var showExitDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     val selectionMode = selectedIds.isNotEmpty()
     val allSelectedPinned = selectionMode && selectedIds.all { it in pinnedIds }
+    val canInteract = isActive &&
+            lifecycleState == Lifecycle.State.RESUMED &&
+            !navigationInProgress
+    val newMessageFabContainerColor = if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val newMessageFabContentColor = if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onPrimary
+    }
 
 
     val normalizedAddresses = remember(conversations) {
@@ -138,17 +161,54 @@ fun HomeScreen(
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) homeViewModel.loadConversations()
+            lifecycleState = lifecycleOwner.lifecycle.currentState
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onHomeResumed()
+                homeViewModel.loadConversations()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            drawerJob?.cancel()
             lifecycleOwner.lifecycle.removeObserver(observer)
             homeViewModel.clearSelection()
         }
     }
     LaunchedEffect(isActive) { if (!isActive) homeViewModel.clearSelection() }
 
-    BackHandler(enabled = isActive) {
+    LaunchedEffect(scrollToTopRequestId, canInteract, conversations.isNotEmpty()) {
+        val requestId = scrollToTopRequestId ?: return@LaunchedEffect
+        if (!canInteract || conversations.isEmpty()) return@LaunchedEffect
+
+        homeViewModel.consumeScrollToTopRequest(requestId)
+        if (listState.isScrollInProgress || listState.firstVisibleItemIndex == 0) {
+            return@LaunchedEffect
+        }
+        isScrollingToTop = true
+        try {
+            listState.animateScrollToItem(0)
+        } finally {
+            isScrollingToTop = false
+        }
+    }
+
+    fun closeDrawer(afterClose: (() -> Unit)? = null) {
+        drawerJob?.cancel()
+        drawerJob = scope.launch {
+            drawerState.close()
+            afterClose?.invoke()
+        }
+    }
+
+    fun requestDrawerOpen() {
+        if (!canInteract || drawerState.isOpen) return
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        drawerJob?.cancel()
+        drawerJob = scope.launch { drawerState.open() }
+    }
+
+    BackHandler(enabled = canInteract) {
         when {
             showDeleteDialog -> showDeleteDialog = false
             selectionMode -> homeViewModel.clearSelection()
@@ -158,19 +218,19 @@ fun HomeScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = !selectionMode,
+        gesturesEnabled = canInteract && !selectionMode,
         drawerContent = {
             ModalDrawerSheet {
                 DrawerHeader()
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                 Spacer(Modifier.height(10.dp))
-                DrawerItem("Messages", Icons.Default.Home, true) { scope.launch { drawerState.close() } }
-                DrawerItem("Archive", Icons.Default.Archive) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.ArchiveChats.route) }
-                DrawerItem("Theme", Icons.Default.Palette) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.Theme.route) }
-                DrawerItem("Scheduled SMS", Icons.Default.Schedule) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.ScheduledSms.route) }
-                DrawerItem("Block Numbers", Icons.Default.Block) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.BlockNumbers.route) }
-                DrawerItem("Starred Messages", Icons.Default.Star) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.StarredMessages.route) }
-                DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) { navigateFromDrawer(scope, drawerState, onDrawerNavigate, Routes.RecycleBin.route) }
+                DrawerItem("Messages", Icons.Default.Home, true) { closeDrawer() }
+                DrawerItem("Archive", Icons.Default.Archive) { closeDrawer { onDrawerNavigate(Routes.ArchiveChats.route) } }
+                DrawerItem("Theme", Icons.Default.Palette) { closeDrawer { onDrawerNavigate(Routes.Theme.route) } }
+                DrawerItem("Scheduled SMS", Icons.Default.Schedule) { closeDrawer { onDrawerNavigate(Routes.ScheduledSms.route) } }
+                DrawerItem("Block Numbers", Icons.Default.Block) { closeDrawer { onDrawerNavigate(Routes.BlockNumbers.route) } }
+                DrawerItem("Starred Messages", Icons.Default.Star) { closeDrawer { onDrawerNavigate(Routes.StarredMessages.route) } }
+                DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) { closeDrawer { onDrawerNavigate(Routes.RecycleBin.route) } }
             }
         }
     ) {
@@ -203,9 +263,7 @@ fun HomeScreen(
                     TopAppBar(
                         navigationIcon = {
                             IconButton(onClick = {
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                                scope.launch { drawerState.open() }
+                                requestDrawerOpen()
                             }) {
                                 Icon(Icons.Default.Menu, "Open navigation menu")
                             }
@@ -215,64 +273,71 @@ fun HomeScreen(
                 }
             },
             floatingActionButton = {
-                if (!selectionMode) Column(
+                if (!selectionMode) FloatingActionButton(
                     modifier = Modifier.navigationBarsPadding().padding(bottom = 8.dp),
-                    horizontalAlignment = Alignment.End
+                    onClick = onNewMessageClick,
+                    containerColor = newMessageFabContainerColor,
+                    contentColor = newMessageFabContentColor
                 ) {
-                    if (showScrollToTop) {
-                        SmallFloatingActionButton(
-                            onClick = {
-                                if (!isScrollingToTop) scope.launch {
-                                    isScrollingToTop = true
-                                    try { listState.animateScrollToItem(0) } finally { isScrollingToTop = false }
-                                }
-                            },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ) { Icon(Icons.Default.ArrowUpward, "Scroll to top") }
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    FloatingActionButton(
-                        onClick = onNewMessageClick,
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ) { Icon(Icons.Default.Add, "New message") }
+                    Icon(Icons.Default.Add, "New message")
                 }
             }
         ) { paddingValues ->
-            if (isLoading && conversations.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(paddingValues), Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(12.dp))
-                        Text("Syncing messages...")
+            Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                if (isLoading && conversations.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(12.dp))
+                            Text("Syncing messages...")
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(bottom = 88.dp)
+                    ) {
+                        items(filteredConversations, key = { it.threadId }) { conversation ->
+                            val selected = conversation.threadId in selectedIds
+                            val displayName = displayNames[conversation.threadId] ?: conversation.address
+                            ConversationCard(
+                                conversation = conversation,
+                                displayName = displayName,
+                                selected = selected,
+                                isPinned = conversation.threadId in pinnedIds,
+                                contactPhoto = contactPhotos[normalizedAddresses[conversation.threadId]],
+                                onClick = {
+                                    if (selectionMode) homeViewModel.toggleSelection(conversation.threadId)
+                                    else onConversationClick(conversation.threadId, displayName, conversation.address)
+                                },
+                                onLongClick = { homeViewModel.toggleSelection(conversation.threadId) }
+                            )
+                        }
+                        if (filteredConversations.isEmpty() && !isLoading) item {
+                            Box(Modifier.fillParentMaxSize(), Alignment.Center) {
+                                Text(if (searchText.isBlank()) "No messages found" else "No matching messages")
+                            }
+                        }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(paddingValues),
-                    state = listState
-                ) {
-                    items(filteredConversations, key = { it.threadId }) { conversation ->
-                        val selected = conversation.threadId in selectedIds
-                        val displayName = displayNames[conversation.threadId] ?: conversation.address
-                        ConversationCard(
-                            conversation = conversation,
-                            displayName = displayName,
-                            selected = selected,
-                            isPinned = conversation.threadId in pinnedIds,
-                            contactPhoto = contactPhotos[normalizedAddresses[conversation.threadId]],
-                            onClick = {
-                                if (selectionMode) homeViewModel.toggleSelection(conversation.threadId)
-                                else onConversationClick(conversation.threadId, displayName, conversation.address)
-                            },
-                            onLongClick = { homeViewModel.toggleSelection(conversation.threadId) }
-                        )
-                    }
-                    if (filteredConversations.isEmpty() && !isLoading) item {
-                        Box(Modifier.fillParentMaxSize(), Alignment.Center) {
-                            Text(if (searchText.isBlank()) "No messages found" else "No matching messages")
-                        }
+
+                if (showScrollToTop) {
+                    SmallFloatingActionButton(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 16.dp),
+                        onClick = {
+                            if (!isScrollingToTop) scope.launch {
+                                isScrollingToTop = true
+                                try { listState.animateScrollToItem(0) } finally { isScrollingToTop = false }
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Icon(Icons.Default.ArrowUpward, "Scroll to top")
                     }
                 }
             }
@@ -333,13 +398,4 @@ private fun DrawerItem(label: String, icon: ImageVector, selected: Boolean = fal
         onClick = onClick,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
     )
-}
-
-private fun navigateFromDrawer(
-    scope: kotlinx.coroutines.CoroutineScope,
-    drawerState: androidx.compose.material3.DrawerState,
-    navigate: (String) -> Unit,
-    route: String
-) {
-    scope.launch { drawerState.close(); navigate(route) }
 }
