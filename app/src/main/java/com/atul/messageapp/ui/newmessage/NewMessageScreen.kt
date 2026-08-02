@@ -1,109 +1,87 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.atul.messageapp.ui.newmessage
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.ui.components.ContactCard
 import com.atul.messageapp.viewmodel.ContactViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewMessageScreen(
+    onBackClick: () -> Unit,
     onContactClick: (String, String) -> Unit
 ) {
-
     val viewModel: ContactViewModel = viewModel()
-
-    var search by remember {
-        mutableStateOf("")
-    }
-
     val contacts by viewModel.contacts.collectAsState()
-
-    val filtered = remember(search, contacts) {
-
-        if (search.isBlank()) {
-
-            contacts
-
-        } else {
-
-            contacts.filter {
-
-                it.name.contains(search, ignoreCase = true) ||
-                        it.phoneNumber.contains(search)
-
-            }
-
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val filtered = remember(query, contacts) {
+        if (query.isBlank()) contacts else contacts.filter {
+            it.name.contains(query, true) || it.phoneNumber.contains(query, true)
         }
-
     }
+    fun exitSearch() { searching = false; query = "" }
+    BackHandler(enabled = searching) { exitSearch() }
+    LaunchedEffect(searching) { if (searching) focusRequester.requestFocus() }
 
-    Scaffold(
-
-        topBar = {
-
-            TopAppBar(
-                title = {
-                    Text("New Message")
+    Scaffold(topBar = {
+        TopAppBar(
+            navigationIcon = {
+                IconButton(onClick = { if (searching) exitSearch() else onBackClick() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, if (searching) "Close search" else "Back")
                 }
-            )
-
-        }
-
-    ) { padding ->
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-
-            item {
-
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = {
-                        search = it
-                    },
-                    label = {
-                        Text("Search Contact")
-                    }
-                )
-
+            },
+            title = {
+                if (searching) {
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { inner -> if (query.isEmpty()) Text("Search contacts", color = MaterialTheme.colorScheme.onSurfaceVariant); inner() }
+                    )
+                } else Text("New Message")
+            },
+            actions = {
+                if (searching && query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") }
+                } else if (!searching) {
+                    IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, "Search contacts") }
+                }
             }
-
-            items(
-                items = filtered,
-                key = { it.phoneNumber }
-            ) { contact ->
-
-                ContactCard(
-                    contact = contact,
-                    onClick = {
-
-                        onContactClick(
-                            contact.name,
-                            contact.phoneNumber
-                        )
-
-                    }
-                )
-
+        )
+    }) { padding ->
+        if (contacts.isEmpty()) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) { Text("No contacts available", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+                items(filtered, key = { it.phoneNumber }) { contact ->
+                    ContactCard(contact) { onContactClick(contact.name, contact.phoneNumber) }
+                }
             }
-
         }
-
     }
-
 }
