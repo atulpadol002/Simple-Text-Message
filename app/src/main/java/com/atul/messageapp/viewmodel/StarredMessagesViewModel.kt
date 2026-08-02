@@ -67,4 +67,11 @@ class StarredMessagesViewModel(application: Application) : AndroidViewModel(appl
         _messages.value = _messages.value.filterNot { it.id == messageId }
         viewModelScope.launch(Dispatchers.IO) { preferences.unstarMessage(messageId) }
     }
+
+    fun unstar(messageIds: Set<Long>) {
+        if (messageIds.isEmpty()) return
+        stateVersion++
+        _messages.value = _messages.value.filterNot { it.id in messageIds }
+        viewModelScope.launch(Dispatchers.IO) { preferences.removeStarredMessageIds(messageIds) }
+    }
 }

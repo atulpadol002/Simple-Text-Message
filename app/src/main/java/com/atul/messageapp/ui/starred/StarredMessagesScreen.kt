@@ -7,7 +7,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,13 +37,27 @@ fun StarredMessagesScreen(
     val names by viewModel.contactNames.collectAsState()
     val loading by viewModel.isLoading.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
+    val selectionMode = selectedIds.isNotEmpty()
+    BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) viewModel.load() }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     Scaffold(topBar = {
-        TopAppBar(
+        if (selectionMode) {
+            TopAppBar(
+                title = { Text(selectedIds.size.toString()) },
+                navigationIcon = { IconButton(onClick = { selectedIds = emptySet() }) { Icon(Icons.Default.Close, "Close selection") } },
+                actions = {
+                    IconButton(onClick = {
+                        viewModel.unstar(selectedIds)
+                        selectedIds = emptySet()
+                    }) { Icon(Icons.Outlined.StarOutline, "Unstar") }
+                }
+            )
+        } else TopAppBar(
             title = { Text("Starred Messages") },
             navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
         )
@@ -58,9 +74,16 @@ fun StarredMessagesScreen(
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(messages, key = SmsMessage::id) { message ->
                     val name = names[message.address].orEmpty().takeIf { it.isNotBlank() } ?: message.address
-                    StarredRow(message, name, { onMessageClick(message.threadId, name, message.address) }) {
-                        viewModel.unstar(message.id)
-                    }
+                    StarredRow(
+                        message = message,
+                        displayName = name,
+                        selected = message.id in selectedIds,
+                        onClick = {
+                            if (selectionMode) selectedIds = selectedIds.toggle(message.id)
+                            else onMessageClick(message.threadId, name, message.address)
+                        },
+                        onLongClick = { selectedIds = selectedIds.toggle(message.id) }
+                    )
                 }
             }
         }
@@ -68,11 +91,13 @@ fun StarredMessagesScreen(
 }
 
 @Composable
-private fun StarredRow(message: SmsMessage, displayName: String, onClick: () -> Unit, onUnstar: () -> Unit) {
+private fun StarredRow(message: SmsMessage, displayName: String, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     Card(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onUnstar),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -88,7 +113,10 @@ private fun StarredRow(message: SmsMessage, displayName: String, onClick: () -> 
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = onUnstar) { Icon(Icons.Default.Star, "Unstar message", tint = MaterialTheme.colorScheme.primary) }
         }
     }
+}
+
+private fun Set<Long>.toggle(id: Long): Set<Long> = toMutableSet().apply {
+    if (!add(id)) remove(id)
 }
