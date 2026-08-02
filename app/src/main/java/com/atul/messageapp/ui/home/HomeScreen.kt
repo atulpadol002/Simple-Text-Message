@@ -3,6 +3,7 @@ package com.atul.messageapp.ui.home
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
@@ -28,7 +30,6 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Menu
@@ -64,10 +65,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -76,6 +79,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.navigation.Routes
+import com.atul.messageapp.R
 import com.atul.messageapp.ui.components.ConversationCard
 import com.atul.messageapp.ui.components.SearchBar
 import com.atul.messageapp.viewmodel.HomeViewModel
@@ -379,9 +383,18 @@ private fun DrawerHeader() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            Modifier
+                .size(52.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
-        ) { Icon(Icons.Default.Sms, null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+        ) {
+            Image(
+                painter = painterResource(R.drawable.message_app_logo),
+                contentDescription = "Message App logo",
+                modifier = Modifier.size(48.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
         Column(Modifier.padding(start = 16.dp)) {
             Text("Messages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("SMS conversations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
