@@ -2,10 +2,15 @@ package com.atul.messageapp.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
+import com.atul.messageapp.utils.getContactName
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class BlockedNumbersViewModel(
     application: Application
@@ -22,16 +27,23 @@ class BlockedNumbersViewModel(
     val blockedNumbers: StateFlow<List<String>> =
         _blockedNumbers.asStateFlow()
 
+    private val _contactNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val contactNames: StateFlow<Map<String, String>> = _contactNames.asStateFlow()
+
     init {
         loadBlockedNumbers()
     }
 
     fun loadBlockedNumbers() {
 
-        _blockedNumbers.value =
-            blockedNumbersPreferences
-                .getBlockedNumbers()
-                .sorted()
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val numbers = blockedNumbersPreferences.getBlockedNumbers().sorted()
+                numbers to numbers.associateWith { getContactName(getApplication(), it) }
+            }
+            _blockedNumbers.value = result.first
+            _contactNames.value = result.second
+        }
     }
 
     fun blockNumber(
