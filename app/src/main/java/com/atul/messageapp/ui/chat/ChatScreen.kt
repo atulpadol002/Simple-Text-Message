@@ -26,6 +26,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -56,6 +61,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +73,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.height
@@ -106,11 +114,14 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextFieldDefaults
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
+import com.atul.messageapp.data.preferences.RecentEmojiPreferences
+import com.atul.messageapp.ui.components.EmojiPicker
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.activity.compose.BackHandler
@@ -167,10 +178,14 @@ fun ChatScreen(
             FocusRequester()
         }
 
-    val messageText =
-        remember {
-            mutableStateOf("")
-        }
+    val messageText = rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(""))
+    }
+
+    var showEmojiPanel by rememberSaveable { mutableStateOf(false) }
+    val recentEmojiPreferences = remember(context) { RecentEmojiPreferences(context) }
+    var recentEmojis by remember { mutableStateOf(recentEmojiPreferences.getRecentEmojis()) }
+    val messageInteractionSource = remember { MutableInteractionSource() }
 
     val showScheduleDialog =
         remember {
@@ -261,14 +276,26 @@ fun ChatScreen(
             selectedMessages.all { it.id in starredMessageIds }
 
     BackHandler(
-        enabled = showDeleteMessagesDialog || selectedMessageIds.isNotEmpty() || isSearchMode
+        enabled = showEmojiPanel || showDeleteMessagesDialog || selectedMessageIds.isNotEmpty() || isSearchMode
     ) {
-        if (showDeleteMessagesDialog) {
+        if (showEmojiPanel) {
+            showEmojiPanel = false
+        } else if (showDeleteMessagesDialog) {
             showDeleteMessagesDialog = false
         } else if (isSearchMode) {
             exitSearchMode()
         } else {
             selectedMessageIds = emptySet()
+        }
+    }
+
+    LaunchedEffect(messageInteractionSource) {
+        messageInteractionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Press && showEmojiPanel) {
+                showEmojiPanel = false
+                messageFocusRequester.requestFocus()
+                keyboardController?.show()
+            }
         }
     }
 
@@ -564,6 +591,7 @@ fun ChatScreen(
 
                         IconButton(
                             onClick = {
+                                showEmojiPanel = false
                                 selectedMessageIds = emptySet()
                                 showMoreMenu.value = false
                                 isSearchMode = true
@@ -747,7 +775,10 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                .windowInsetsPadding(
+                    if (showEmojiPanel) WindowInsets.navigationBars
+                    else WindowInsets.ime.union(WindowInsets.navigationBars)
+                )
         ) {
 
             LazyColumn(
@@ -921,6 +952,7 @@ fun ChatScreen(
                         false,
                     minLines = 1,
                     maxLines = 5,
+                    interactionSource = messageInteractionSource,
                     shape =
                         RoundedCornerShape(
                             24.dp
@@ -934,10 +966,20 @@ fun ChatScreen(
                     ),
                     leadingIcon = {
                         IconButton(onClick = {
-                            messageFocusRequester.requestFocus()
-                            keyboardController?.show()
+                            if (showEmojiPanel) {
+                                showEmojiPanel = false
+                                messageFocusRequester.requestFocus()
+                                keyboardController?.show()
+                            } else {
+                                keyboardController?.hide()
+                                showEmojiPanel = true
+                            }
                         }) {
-                            Icon(Icons.Default.EmojiEmotions, "Open emoji keyboard")
+                            Icon(
+                                if (showEmojiPanel) Icons.Default.Keyboard
+                                else Icons.Default.EmojiEmotions,
+                                if (showEmojiPanel) "Show keyboard" else "Open emoji picker"
+                            )
                         }
                     },
                     trailingIcon = {
@@ -946,7 +988,7 @@ fun ChatScreen(
                             onClick = {
 
                                 if (
-                                    messageText.value
+                                    messageText.value.text
                                         .isBlank()
                                 ) {
 
@@ -995,16 +1037,16 @@ fun ChatScreen(
                     onClick = {
 
                         if (
-                            messageText.value
+                            messageText.value.text
                                 .isNotBlank()
                         ) {
 
                             val text =
-                                messageText.value
+                                messageText.value.text
                                     .trim()
 
                             messageText.value =
-                                ""
+                                TextFieldValue("")
 
                             chatViewModel.sendMessage(
                                 phoneNumber =
@@ -1032,6 +1074,28 @@ fun ChatScreen(
                     )
                 }
             }
+
+            AnimatedVisibility(
+                visible = showEmojiPanel,
+                enter = expandVertically(expandFrom = Alignment.Bottom),
+                exit = shrinkVertically(shrinkTowards = Alignment.Bottom)
+            ) {
+                EmojiPicker(
+                    recentEmojis = recentEmojis,
+                    onEmojiSelected = { emoji ->
+                        val current = messageText.value
+                        val start = current.selection.min.coerceIn(0, current.text.length)
+                        val end = current.selection.max.coerceIn(start, current.text.length)
+                        val updatedText = current.text.replaceRange(start, end, emoji)
+                        val cursor = start + emoji.length
+                        messageText.value = TextFieldValue(
+                            text = updatedText,
+                            selection = TextRange(cursor)
+                        )
+                        recentEmojis = recentEmojiPreferences.addEmoji(emoji)
+                    }
+                )
+            }
         }
     }
 
@@ -1047,7 +1111,7 @@ fun ChatScreen(
             phoneNumber =
                 phoneNumber,
             initialMessage =
-                messageText.value,
+                messageText.value.text,
             initialScheduledTime =
                 System.currentTimeMillis() +
                         60_000L,
@@ -1078,7 +1142,7 @@ fun ChatScreen(
                 if (scheduled) {
 
                     messageText.value =
-                        ""
+                        TextFieldValue("")
 
                     showScheduleDialog.value =
                         false
