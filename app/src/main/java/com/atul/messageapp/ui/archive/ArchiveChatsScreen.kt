@@ -10,7 +10,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Unarchive
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -39,9 +39,11 @@ fun ArchiveChatsScreen(
     val viewModel: ArchiveViewModel = viewModel()
     val lifecycleOwner = LocalLifecycleOwner.current
     val conversations by viewModel.conversations.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
     val selectedIds by viewModel.selectedThreadIds.collectAsState()
     val contactNames by viewModel.contactNames.collectAsState()
+    val pinnedIds by viewModel.pinnedThreadIds.collectAsState()
+    val contactPresentations by viewModel.contactPresentations.collectAsState()
+    val hasLoaded by viewModel.hasLoaded.collectAsState()
     val selectionMode = selectedIds.isNotEmpty()
 
     DisposableEffect(lifecycleOwner) {
@@ -80,9 +82,7 @@ fun ArchiveChatsScreen(
         }
     ) { paddingValues ->
         when {
-            isLoading && conversations.isEmpty() -> Box(
-                Modifier.fillMaxSize().padding(paddingValues), Alignment.Center
-            ) { CircularProgressIndicator() }
+            !hasLoaded && conversations.isEmpty() -> Box(Modifier.fillMaxSize().padding(paddingValues))
             conversations.isEmpty() -> Box(
                 Modifier.fillMaxSize().padding(paddingValues), Alignment.Center
             ) { Text("No archived conversations") }
@@ -93,6 +93,8 @@ fun ArchiveChatsScreen(
                         conversation = conversation,
                         displayName = contactNames[conversation.threadId] ?: conversation.address,
                         selected = selected,
+                        isPinned = conversation.threadId in pinnedIds,
+                        contactPhoto = contactPresentations[conversation.threadId]?.photo?.asImageBitmap(),
                         onClick = {
                             if (selectionMode) viewModel.toggleSelection(conversation.threadId)
                             else onConversationClick(
