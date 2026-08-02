@@ -204,6 +204,39 @@ class SmsRepository(
         return messages
     }
 
+    fun getMessagesByIds(messageIds: Set<Long>): List<SmsMessage> {
+        if (messageIds.isEmpty()) return emptyList()
+        val messages = mutableListOf<SmsMessage>()
+        messageIds.chunked(500).forEach { ids ->
+            val placeholders = ids.joinToString(",") { "?" }
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE
+                ),
+                "${Telephony.Sms._ID} IN ($placeholders)",
+                ids.map(Long::toString).toTypedArray(),
+                "${Telephony.Sms.DATE} DESC"
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow(Telephony.Sms._ID)
+                val threadIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)
+                val addressIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+                val bodyIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
+                val dateIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
+                val typeIndex = cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE)
+                while (cursor.moveToNext()) {
+                    messages += SmsMessage(
+                        cursor.getLong(idIndex), cursor.getLong(threadIndex),
+                        cursor.getString(addressIndex).orEmpty(), cursor.getString(bodyIndex).orEmpty(),
+                        cursor.getLong(dateIndex), cursor.getInt(typeIndex)
+                    )
+                }
+            }
+        }
+        return messages.sortedByDescending { it.date }
+    }
+
     fun getConversationSnapshotMessages(
         threadId: Long
     ): List<DeletedMessage>? {

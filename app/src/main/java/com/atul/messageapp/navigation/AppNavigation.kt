@@ -19,6 +19,7 @@ import com.atul.messageapp.ui.theme.ThemeScreen
 import com.atul.messageapp.ui.archive.ArchiveChatsScreen
 import com.atul.messageapp.ui.scheduled.ScheduledSmsScreen
 import com.atul.messageapp.ui.blocked.BlockedNumbersScreen
+import com.atul.messageapp.ui.starred.StarredMessagesScreen
 
 
 @Composable
@@ -113,6 +114,7 @@ fun AppNavigation(
             Routes.NewMessage.route
         ) {
             NewMessageScreen(
+                onBackClick = { navController.popBackStack() },
                 onContactClick = { name, phone ->
                     navController.navigate(
                         "chat/0/" +
@@ -219,12 +221,14 @@ fun AppNavigation(
         composable(
             Routes.StarredMessages.route
         ) {
-            FeatureScreen(
-                title = "Starred Messages",
-                description =
-                    "Starred messages will appear here.",
+            StarredMessagesScreen(
                 onBackClick = {
                     navController.popBackStack()
+                },
+                onMessageClick = { conversationId, name, phoneNumber ->
+                    navController.navigate(
+                        "chat/$conversationId/${Uri.encode(name)}/${Uri.encode(phoneNumber)}"
+                    )
                 }
             )
         }
