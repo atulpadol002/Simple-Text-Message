@@ -122,9 +122,14 @@ class HomeViewModel(
         viewModelScope.launch {
 
             SmsEventBus.events
-                .collectLatest {
-
-                    loadConversations()
+                .collectLatest { event ->
+                    when (event) {
+                        SmsEventBus.Event.SmsChanged,
+                        SmsEventBus.Event.ConversationDeleted,
+                        SmsEventBus.Event.ConversationUnblocked,
+                        SmsEventBus.Event.ConversationUnarchived,
+                        SmsEventBus.Event.ConversationRestored -> loadConversations()
+                    }
                 }
         }
     }
@@ -316,6 +321,18 @@ class HomeViewModel(
         val selected = _selectedThreadIds.value
         if (selected.isEmpty()) return
         selected.forEach(archivePreferences::archiveConversation)
+        stateVersion++
+        _conversations.value = _conversations.value.filterNot { it.threadId in selected }
+        persistVisibleState()
+        clearSelection()
+    }
+
+    fun blockSelected() {
+        val selected = _selectedThreadIds.value
+        if (selected.isEmpty()) return
+        _conversations.value
+            .filter { it.threadId in selected }
+            .forEach { blockedNumbersPreferences.blockNumber(it.address) }
         stateVersion++
         _conversations.value = _conversations.value.filterNot { it.threadId in selected }
         persistVisibleState()

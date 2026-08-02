@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun SearchBar(searchText: String, onValueChange: (String) -> Unit) {
@@ -37,11 +38,18 @@ fun SearchBar(searchText: String, onValueChange: (String) -> Unit) {
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f).padding(start = 10.dp),
                 singleLine = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp
+                ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     if (searchText.isEmpty()) {
-                        Text("Search Messages", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Search Messages",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
                     }
                     inner()
                 }

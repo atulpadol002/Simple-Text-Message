@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -153,7 +153,7 @@ private fun BlockedNumberItem(contactName: String, phoneNumber: String, onUnbloc
                 if (savedContact) Text(phoneNumber, style = MaterialTheme.typography.bodySmall)
                 Text("Blocked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onUnblockClick) { Icon(Icons.Default.Delete, "Unblock number") }
+            IconButton(onClick = onUnblockClick) { Icon(Icons.Default.LockOpen, "Unblock number") }
         }
     }
 }

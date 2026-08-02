@@ -11,8 +11,6 @@ import com.atul.messageapp.receiver.SmsEventBus
 import com.atul.messageapp.utils.getContactName
 import com.atul.messageapp.utils.ContactPresentation
 import com.atul.messageapp.utils.ContactPresentationResolver
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,6 +68,7 @@ class ArchiveViewModel(
 
     private var loadJob:
             Job? = null
+    private var reloadPending = false
 
     init {
         observeIncomingSms()
@@ -77,25 +76,28 @@ class ArchiveViewModel(
 
     private fun observeIncomingSms() {
         viewModelScope.launch {
-            SmsEventBus.events.collectLatest {
-                loadArchivedConversations()
+            SmsEventBus.events.collectLatest { event ->
+                when (event) {
+                    SmsEventBus.Event.SmsChanged,
+                    SmsEventBus.Event.ConversationDeleted,
+                    SmsEventBus.Event.ConversationUnarchived,
+                    SmsEventBus.Event.ConversationRestored -> loadArchivedConversations()
+                    SmsEventBus.Event.ConversationUnblocked -> Unit
+                }
             }
         }
     }
 
     fun loadArchivedConversations() {
+        if (loadJob?.isActive == true) {
+            reloadPending = true
+            return
+        }
 
-        loadJob?.cancel()
+        val showInitialLoading = !_hasLoaded.value && _conversations.value.isEmpty()
+        if (showInitialLoading) _isLoading.value = true
 
-        val newLoadJob =
-            viewModelScope.launch(
-                start = CoroutineStart.LAZY
-            ) {
-
-            val currentLoadJob =
-                coroutineContext[Job]
-
-            _isLoading.value = true
+        loadJob = viewModelScope.launch {
 
             try {
                 val result =
@@ -134,71 +136,56 @@ class ArchiveViewModel(
                         )
                     }
 
-                if (loadJob === currentLoadJob) {
-
-                    archivePreferences
-                        .removeArchivedThreadIds(
-                            result.first -
-                                    result.second
-                        )
-
-                    _conversations.value = result.third.conversations
-                    _contactNames.value = result.third.names
-                    _pinnedThreadIds.value = result.third.pinnedIds
-                    _contactPresentations.value = result.third.presentations
-                    _hasLoaded.value = true
+                withContext(Dispatchers.IO) {
+                    archivePreferences.removeArchivedThreadIds(result.first - result.second)
                 }
 
-            } catch (
-                exception: CancellationException
-            ) {
-
-                throw exception
+                _conversations.value = result.third.conversations
+                _contactNames.value = result.third.names
+                _pinnedThreadIds.value = result.third.pinnedIds
+                _contactPresentations.value = result.third.presentations
+                _hasLoaded.value = true
 
             } catch (exception: SecurityException) {
 
                 exception.printStackTrace()
 
-                if (loadJob === currentLoadJob) {
-
-                    if (_conversations.value.isEmpty()) _conversations.value = emptyList()
-                }
+                if (_conversations.value.isEmpty()) _conversations.value = emptyList()
 
             } catch (exception: Exception) {
 
                 exception.printStackTrace()
 
-                if (loadJob === currentLoadJob) {
-
-                    if (_conversations.value.isEmpty()) _conversations.value = emptyList()
-                }
+                if (_conversations.value.isEmpty()) _conversations.value = emptyList()
 
             } finally {
 
-                if (loadJob === currentLoadJob) {
-
-                    _isLoading.value = false
-                    _hasLoaded.value = true
+                if (showInitialLoading) _isLoading.value = false
+                _hasLoaded.value = true
+                loadJob = null
+                if (reloadPending) {
+                    reloadPending = false
+                    loadArchivedConversations()
                 }
             }
         }
-
-        loadJob = newLoadJob
-        newLoadJob.start()
     }
 
     fun unarchiveConversation(
         conversation: SmsConversation
     ) {
-        archivePreferences.unarchiveConversation(
-            conversation.threadId
-        )
-
         _conversations.value =
             _conversations.value.filterNot {
                 it.threadId ==
                         conversation.threadId
             }
+
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                archivePreferences.unarchiveConversation(conversation.threadId)
+            }
+            SmsEventBus.notifyConversationUnarchived()
+        }
     }
 
     fun toggleSelection(threadId: Long) {
@@ -214,8 +201,13 @@ class ArchiveViewModel(
     fun unarchiveSelected() {
         val selected = _selectedThreadIds.value
         if (selected.isEmpty()) return
-        selected.forEach(archivePreferences::unarchiveConversation)
         _conversations.value = _conversations.value.filterNot { it.threadId in selected }
         clearSelection()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                selected.forEach(archivePreferences::unarchiveConversation)
+            }
+            SmsEventBus.notifyConversationUnarchived()
+        }
     }
 }

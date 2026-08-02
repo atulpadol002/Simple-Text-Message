@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PushPin
@@ -66,6 +65,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -88,6 +89,8 @@ fun HomeScreen(
 ) {
     val homeViewModel: HomeViewModel = viewModel()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -104,6 +107,7 @@ fun HomeScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     val selectionMode = selectedIds.isNotEmpty()
     val allSelectedPinned = selectionMode && selectedIds.all { it in pinnedIds }
+
 
     val normalizedAddresses = remember(conversations) {
         conversations.associate { it.threadId to HomeViewModel.normalizeAddress(it.address) }
@@ -125,8 +129,6 @@ fun HomeScreen(
             }
         }
     }
-    val visibleIds = remember(filteredConversations) { filteredConversations.mapTo(linkedSetOf()) { it.threadId } }
-    val allVisibleSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
     var isScrollingToTop by remember { mutableStateOf(false) }
     val showScrollToTop by remember(listState, selectionMode, isLoading, filteredConversations.isNotEmpty()) {
         derivedStateOf {
@@ -176,23 +178,21 @@ fun HomeScreen(
             topBar = {
                 if (selectionMode) {
                     TopAppBar(
-                        title = { Text("${selectedIds.size} selected") },
+                        title = { Text(selectedIds.size.toString()) },
                         navigationIcon = {
                             IconButton(onClick = homeViewModel::clearSelection) {
                                 Icon(Icons.Default.Close, "Cancel selection")
                             }
                         },
                         actions = {
-                            IconButton(onClick = {
-                                homeViewModel.setVisibleSelection(visibleIds, !allVisibleSelected)
-                            }) {
-                                Icon(Icons.Default.SelectAll, if (allVisibleSelected) "Deselect all" else "Select all")
-                            }
                             IconButton(onClick = homeViewModel::togglePinnedSelection) {
                                 Icon(Icons.Default.PushPin, if (allSelectedPinned) "Unpin" else "Pin")
                             }
                             IconButton(onClick = homeViewModel::archiveSelected) {
                                 Icon(Icons.Default.Archive, "Archive selected conversations")
+                            }
+                            IconButton(onClick = homeViewModel::blockSelected) {
+                                Icon(Icons.Default.Block, "Block selected conversations")
                             }
                             IconButton(enabled = !deleting, onClick = { showDeleteDialog = true }) {
                                 Icon(Icons.Default.Delete, "Delete selected conversations")
@@ -202,7 +202,11 @@ fun HomeScreen(
                 } else {
                     TopAppBar(
                         navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            IconButton(onClick = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                                scope.launch { drawerState.open() }
+                            }) {
                                 Icon(Icons.Default.Menu, "Open navigation menu")
                             }
                         },
@@ -277,8 +281,14 @@ fun HomeScreen(
 
     if (showDeleteDialog) AlertDialog(
         onDismissRequest = { if (!deleting) showDeleteDialog = false },
-        title = { Text("Delete") },
-        text = { Text(if (selectedIds.size == 1) "Are you sure you want to delete this conversation?" else "Are you sure you want to delete these conversations?") },
+        title = { Text("Delete conversation?", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Text(
+                if (selectedIds.size == 1) "This conversation will be moved to Recycle Bin."
+                else "These conversations will be moved to Recycle Bin.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
         confirmButton = {
             TextButton(enabled = !deleting, onClick = {
                 showDeleteDialog = false
@@ -290,9 +300,10 @@ fun HomeScreen(
 
     if (showExitDialog) AlertDialog(
         onDismissRequest = { showExitDialog = false },
-        title = { Text("Are you sure you want to exit?") },
-        confirmButton = { TextButton(onClick = { showExitDialog = false; (context as? Activity)?.finish() }) { Text("Yes") } },
-        dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("No") } }
+        title = { Text("Exit Message App?", style = MaterialTheme.typography.titleLarge) },
+        text = { Text("Are you sure you want to exit?", style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = { TextButton(onClick = { showExitDialog = false; (context as? Activity)?.finish() }) { Text("Exit") } },
+        dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Cancel") } }
     )
 }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import com.atul.messageapp.utils.getContactName
+import com.atul.messageapp.receiver.SmsEventBus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,19 +62,18 @@ class BlockedNumbersViewModel(
         return blocked
     }
 
-    fun unblockNumber(
-        phoneNumber: String
-    ): Boolean {
-
-        val unblocked =
-            blockedNumbersPreferences
-                .unblockNumber(phoneNumber)
-
-        if (unblocked) {
-            loadBlockedNumbers()
+    fun unblockNumber(phoneNumber: String) {
+        viewModelScope.launch {
+            val unblocked = withContext(Dispatchers.IO) {
+                blockedNumbersPreferences.unblockNumber(phoneNumber)
+            }
+            if (unblocked) {
+                _blockedNumbers.value = _blockedNumbers.value.filterNot { it == phoneNumber }
+                _contactNames.value = _contactNames.value - phoneNumber
+                SmsEventBus.notifyConversationUnblocked()
+                loadBlockedNumbers()
+            }
         }
-
-        return unblocked
     }
 
     fun isNumberBlocked(

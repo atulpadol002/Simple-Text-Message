@@ -7,6 +7,7 @@ import com.atul.messageapp.data.model.DeletedConversation
 import com.atul.messageapp.data.repository.RecycleBinRepository
 import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.sms.DefaultSmsManager
+import com.atul.messageapp.receiver.SmsEventBus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,6 +94,7 @@ class RecycleBinViewModel(
                 }
 
                 if (restoreCompleted) {
+                    SmsEventBus.notifyConversationRestored()
                     loadDeletedConversations()
                 }
             } catch (exception: Exception) {
