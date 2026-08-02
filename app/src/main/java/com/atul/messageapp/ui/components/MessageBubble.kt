@@ -35,6 +35,8 @@ fun MessageBubble(
     message: Message,
     isStarred: Boolean = false,
     isSelected: Boolean = false,
+    isSearchMatch: Boolean = false,
+    isCurrentSearchMatch: Boolean = false,
     onClick: (Message) -> Unit = {},
     onRetryClick: (Message) -> Unit = {},
     onLongClick: (Message) -> Unit = {}
@@ -97,10 +99,11 @@ fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isSelected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-                } else {
-                    androidx.compose.ui.graphics.Color.Transparent
+                when {
+                    isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                    isCurrentSearchMatch -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.24f)
+                    isSearchMatch -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f)
+                    else -> androidx.compose.ui.graphics.Color.Transparent
                 },
                 RoundedCornerShape(12.dp)
             )

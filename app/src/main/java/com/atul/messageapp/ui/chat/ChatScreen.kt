@@ -100,12 +100,17 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextFieldDefaults
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.Job
 
 @Composable
 fun ChatScreen(
@@ -152,6 +157,11 @@ fun ChatScreen(
             FocusRequester()
         }
 
+    val searchFocusRequester =
+        remember {
+            FocusRequester()
+        }
+
     val messageText =
         remember {
             mutableStateOf("")
@@ -163,6 +173,10 @@ fun ChatScreen(
         }
 
     var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
+    var isSearchMode by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var currentSearchMatchId by remember { mutableStateOf<Long?>(null) }
+    var searchScrollJob by remember { mutableStateOf<Job?>(null) }
     var showDeleteMessagesDialog by remember { mutableStateOf(false) }
     var isDeletingMessages by remember { mutableStateOf(false) }
     val contactAvatar by chatViewModel.contactAvatar.collectAsState()
@@ -193,6 +207,45 @@ fun ChatScreen(
     val listState =
         rememberLazyListState()
 
+    val trimmedSearchQuery by remember {
+        derivedStateOf { searchQuery.trim() }
+    }
+    val matchingMessageIds by remember(messages, trimmedSearchQuery) {
+        derivedStateOf {
+            if (trimmedSearchQuery.isEmpty()) {
+                emptyList()
+            } else {
+                messages.asSequence()
+                    .filter { it.body.contains(trimmedSearchQuery, ignoreCase = true) }
+                    .map { it.id }
+                    .toList()
+            }
+        }
+    }
+    val currentSearchMatchIndex = matchingMessageIds.indexOf(currentSearchMatchId)
+
+    fun exitSearchMode() {
+        searchScrollJob?.cancel()
+        searchScrollJob = null
+        isSearchMode = false
+        searchQuery = ""
+        currentSearchMatchId = null
+    }
+
+    fun selectSearchResult(index: Int) {
+        if (matchingMessageIds.isEmpty()) return
+        val wrappedIndex = (index + matchingMessageIds.size) % matchingMessageIds.size
+        val matchId = matchingMessageIds[wrappedIndex]
+        currentSearchMatchId = matchId
+        val messageIndex = messages.indexOfFirst { it.id == matchId }
+        if (messageIndex >= 0) {
+            searchScrollJob?.cancel()
+            searchScrollJob = coroutineScope.launch {
+                listState.animateScrollToItem(messageIndex)
+            }
+        }
+    }
+
     val selectedMessages = messages
         .filter { it.id in selectedMessageIds }
         .sortedBy { it.timestamp }
@@ -200,12 +253,36 @@ fun ChatScreen(
             selectedMessages.all { it.id in starredMessageIds }
 
     BackHandler(
-        enabled = showDeleteMessagesDialog || selectedMessageIds.isNotEmpty()
+        enabled = showDeleteMessagesDialog || selectedMessageIds.isNotEmpty() || isSearchMode
     ) {
         if (showDeleteMessagesDialog) {
             showDeleteMessagesDialog = false
+        } else if (isSearchMode) {
+            exitSearchMode()
         } else {
             selectedMessageIds = emptySet()
+        }
+    }
+
+    LaunchedEffect(isSearchMode, trimmedSearchQuery, matchingMessageIds) {
+        if (!isSearchMode || matchingMessageIds.isEmpty()) {
+            currentSearchMatchId = null
+        } else if (currentSearchMatchId !in matchingMessageIds) {
+            currentSearchMatchId = matchingMessageIds.first()
+            val messageIndex = messages.indexOfFirst { it.id == currentSearchMatchId }
+            if (messageIndex >= 0) {
+                searchScrollJob?.cancel()
+                searchScrollJob = coroutineScope.launch {
+                    listState.animateScrollToItem(messageIndex)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(isSearchMode) {
+        if (isSearchMode) {
+            searchFocusRequester.requestFocus()
+            keyboardController?.show()
         }
     }
 
@@ -241,7 +318,7 @@ fun ChatScreen(
                         0
                     }
 
-        if (totalItems > 0) {
+        if (totalItems > 0 && !isSearchMode) {
 
             if (messages.size > 100) {
                 listState.scrollToItem(
@@ -286,6 +363,56 @@ fun ChatScreen(
                         }
                         IconButton(onClick = { showDeleteMessagesDialog = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        }
+                    }
+                )
+            } else if (isSearchMode) {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    navigationIcon = {
+                        IconButton(onClick = { exitSearchMode() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close search")
+                        }
+                    },
+                    title = {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester),
+                            placeholder = { Text("Search messages", maxLines = 1) },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                    },
+                    actions = {
+                        Text(
+                            text = if (matchingMessageIds.isEmpty()) "0 of 0"
+                            else "${currentSearchMatchIndex.coerceAtLeast(0) + 1} of ${matchingMessageIds.size}",
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1
+                        )
+                        IconButton(
+                            enabled = matchingMessageIds.isNotEmpty(),
+                            onClick = { selectSearchResult(currentSearchMatchIndex - 1) }
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous result")
+                        }
+                        IconButton(
+                            enabled = matchingMessageIds.isNotEmpty(),
+                            onClick = { selectSearchResult(currentSearchMatchIndex + 1) }
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next result")
                         }
                     }
                 )
@@ -391,6 +518,20 @@ fun ChatScreen(
                                 maxLines = 1,
                                 overflow =
                                     TextOverflow.Ellipsis
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                selectedMessageIds = emptySet()
+                                showMoreMenu.value = false
+                                isSearchMode = true
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search messages",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
 
@@ -636,6 +777,10 @@ fun ChatScreen(
                                     ),
                             isSelected =
                                 message.id in selectedMessageIds,
+                            isSearchMatch =
+                                isSearchMode && message.id in matchingMessageIds,
+                            isCurrentSearchMatch =
+                                isSearchMode && message.id == currentSearchMatchId,
                             onClick = { tappedMessage ->
                                 if (selectedMessageIds.isNotEmpty()) {
                                     selectedMessageIds =
@@ -658,6 +803,7 @@ fun ChatScreen(
                                     longPressedMessage:
                                     Message ->
 
+                                if (isSearchMode) exitSearchMode()
                                 selectedMessageIds =
                                     selectedMessageIds + longPressedMessage.id
                             }
