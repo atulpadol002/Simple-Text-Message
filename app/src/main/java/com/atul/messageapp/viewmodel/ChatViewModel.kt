@@ -17,6 +17,7 @@ import com.atul.messageapp.data.preferences.StarredMessagesPreferences
 import com.atul.messageapp.data.repository.MessageRepository
 import com.atul.messageapp.sms.ScheduledSmsScheduler
 import com.atul.messageapp.sms.SmsDeleter
+import com.atul.messageapp.receiver.SmsEventBus
 import com.atul.messageapp.utils.getContactName
 import com.atul.messageapp.utils.ContactPresentationResolver
 import kotlinx.coroutines.Dispatchers
@@ -750,14 +751,29 @@ class ChatViewModel(
     }
 
     fun deleteConversation(threadId: Long, onComplete: (Boolean) -> Unit) {
-        if (threadId <= 0L || _isDeletingConversation.value) return
+        val resolvedThreadId = threadId.takeIf { it > 0L } ?: currentConversationId.orEmptyThreadId()
+        if (resolvedThreadId <= 0L) {
+            onComplete(false)
+            return
+        }
+        if (_isDeletingConversation.value) return
         _isDeletingConversation.value = true
         viewModelScope.launch {
-            val deleted = withContext(Dispatchers.IO) { smsDeleter.deleteConversation(threadId) }
-            _isDeletingConversation.value = false
+            val deleted = try {
+                withContext(Dispatchers.IO) { smsDeleter.deleteConversation(resolvedThreadId) }
+            } catch (_: Exception) {
+                false
+            } finally {
+                _isDeletingConversation.value = false
+            }
+            if (deleted) {
+                SmsEventBus.notifyConversationDeleted()
+            }
             onComplete(deleted)
         }
     }
+
+    private fun Long?.orEmptyThreadId(): Long = this ?: 0L
 
     fun setMessagesStarred(
         messages: List<Message>,

@@ -89,9 +89,11 @@ fun AppNavigation(
             HomeScreen(
                 isActive = currentRoute == Routes.Home.route,
                 onNewMessageClick = {
-                    navController.navigate(
-                        Routes.NewMessage.route
-                    )
+                    if (navController.currentDestination?.route == Routes.Home.route) {
+                        navController.navigate(Routes.NewMessage.route) {
+                            launchSingleTop = true
+                        }
+                    }
                 },
                 onConversationClick = {
                         conversationId,
@@ -112,9 +114,23 @@ fun AppNavigation(
 
         composable(
             Routes.NewMessage.route
-        ) {
+        ) { backStackEntry ->
+            val backHandled = androidx.compose.runtime.remember(backStackEntry) {
+                androidx.compose.runtime.mutableStateOf(false)
+            }
             NewMessageScreen(
-                onBackClick = { navController.popBackStack() },
+                onBackClick = back@{
+                    if (backHandled.value || navController.currentDestination?.route != Routes.NewMessage.route) {
+                        return@back
+                    }
+                    if (navController.previousBackStackEntry?.destination?.route != Routes.Home.route) {
+                        return@back
+                    }
+                    backHandled.value = true
+                    if (!navController.popBackStack()) {
+                        backHandled.value = false
+                    }
+                },
                 onContactClick = { name, phone ->
                     navController.navigate(
                         "chat/0/" +
@@ -160,6 +176,12 @@ fun AppNavigation(
                 conversationId = conversationId,
                 onBackClick = {
                     navController.popBackStack()
+                },
+                onConversationDeleted = {
+                    navController.popBackStack(
+                        Routes.Home.route,
+                        inclusive = false
+                    )
                 }
             )
         }

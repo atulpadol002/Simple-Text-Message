@@ -69,6 +69,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.material3.Surface
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -117,7 +121,8 @@ fun ChatScreen(
     contactName: String,
     phoneNumber: String,
     conversationId: Long,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onConversationDeleted: () -> Unit
 ) {
 
     val chatViewModel: ChatViewModel =
@@ -378,41 +383,67 @@ fun ChatScreen(
                         }
                     },
                     title = {
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(searchFocusRequester),
-                            placeholder = { Text("Search messages", maxLines = 1) },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        )
-                    },
-                    actions = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp)
+                                        .focusRequester(searchFocusRequester),
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    decorationBox = { innerTextField ->
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            if (searchQuery.isEmpty()) {
+                                                Text(
+                                                    "Search messages",
+                                                    maxLines = 1,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    }
+                                )
+                            }
                         Text(
                             text = if (matchingMessageIds.isEmpty()) "0 of 0"
                             else "${currentSearchMatchIndex.coerceAtLeast(0) + 1} of ${matchingMessageIds.size}",
                             style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 6.dp)
                         )
                         IconButton(
+                            modifier = Modifier.size(40.dp),
                             enabled = matchingMessageIds.isNotEmpty(),
                             onClick = { selectSearchResult(currentSearchMatchIndex - 1) }
                         ) {
                             Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous result")
                         }
                         IconButton(
+                            modifier = Modifier.size(40.dp),
                             enabled = matchingMessageIds.isNotEmpty(),
                             onClick = { selectSearchResult(currentSearchMatchIndex + 1) }
                         ) {
                             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next result")
+                        }
                         }
                     }
                 )
@@ -856,32 +887,6 @@ fun ChatScreen(
                     Alignment.CenterVertically
             ) {
 
-                IconButton(
-                    modifier =
-                        Modifier.size(44.dp),
-                    onClick = {
-
-                        messageFocusRequester
-                            .requestFocus()
-
-                        keyboardController
-                            ?.show()
-                    }
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Default
-                                .EmojiEmotions,
-                        contentDescription =
-                            "Open emoji keyboard",
-                        tint =
-                            MaterialTheme
-                                .colorScheme
-                                .onPrimaryContainer
-                    )
-                }
-
                 TextField(
                     modifier = Modifier
                         .weight(1f)
@@ -917,6 +922,14 @@ fun ChatScreen(
                         focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                         unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
                     ),
+                    leadingIcon = {
+                        IconButton(onClick = {
+                            messageFocusRequester.requestFocus()
+                            keyboardController?.show()
+                        }) {
+                            Icon(Icons.Default.EmojiEmotions, "Open emoji keyboard")
+                        }
+                    },
                     trailingIcon = {
 
                         IconButton(
@@ -1030,6 +1043,7 @@ fun ChatScreen(
                         60_000L,
             confirmButtonText =
                 "Schedule",
+            allowMessageEditing = false,
             onDismiss = {
 
                 showScheduleDialog.value =
@@ -1286,14 +1300,16 @@ fun ChatScreen(
                     title = {
 
                         Text(
-                            text = "Delete"
+                            text = "Delete conversation?",
+                            style = MaterialTheme.typography.titleLarge
                         )
                     },
                     text = {
 
                         Text(
                             text =
-                                "Are you sure you want to delete this conversation?"
+                                "This conversation will be moved to Recycle Bin.",
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     },
                     confirmButton = {
@@ -1302,9 +1318,12 @@ fun ChatScreen(
                             enabled = !isDeletingConversation,
                             onClick = {
                                 chatViewModel.deleteConversation(conversationId) { deleted ->
-                                    showDeleteConversationDialog.value = false
-                                    Toast.makeText(context, if (deleted) "Conversation deleted" else "Unable to delete conversation", Toast.LENGTH_SHORT).show()
-                                    if (deleted) onBackClick()
+                                    if (deleted) {
+                                        showDeleteConversationDialog.value = false
+                                        onConversationDeleted()
+                                    } else {
+                                        Toast.makeText(context, "Unable to delete conversation", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                         ) {

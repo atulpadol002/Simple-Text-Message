@@ -46,6 +46,7 @@ fun ScheduledMessageEditorDialog(
     initialMessage: String,
     initialScheduledTime: Long,
     confirmButtonText: String,
+    allowMessageEditing: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (
         message: String,
@@ -84,7 +85,7 @@ fun ScheduledMessageEditorDialog(
 
             Column {
 
-                Text(
+                if (allowMessageEditing) Text(
                     text =
                         contactName.ifBlank {
                             phoneNumber
@@ -97,7 +98,7 @@ fun ScheduledMessageEditorDialog(
                         FontWeight.SemiBold
                 )
 
-                if (
+                if (allowMessageEditing &&
                     contactName.isNotBlank()
                 ) {
 
@@ -119,12 +120,12 @@ fun ScheduledMessageEditorDialog(
                     )
                 }
 
-                Spacer(
+                if (allowMessageEditing) Spacer(
                     modifier =
                         Modifier.height(14.dp)
                 )
 
-                OutlinedTextField(
+                if (allowMessageEditing) OutlinedTextField(
                     modifier =
                         Modifier.fillMaxWidth(),
                     value = messageText,
@@ -138,7 +139,7 @@ fun ScheduledMessageEditorDialog(
                     maxLines = 5
                 )
 
-                Spacer(
+                if (allowMessageEditing) Spacer(
                     modifier =
                         Modifier.height(12.dp)
                 )
