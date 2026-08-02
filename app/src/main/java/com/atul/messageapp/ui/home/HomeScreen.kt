@@ -14,13 +14,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PushPin
@@ -28,11 +30,14 @@ import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,10 +58,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,7 +75,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.navigation.Routes
 import com.atul.messageapp.ui.components.ConversationCard
 import com.atul.messageapp.ui.components.SearchBar
-import com.atul.messageapp.ui.components.TopBar
 import com.atul.messageapp.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
 
@@ -84,9 +91,11 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     val conversations by homeViewModel.conversations.collectAsState()
     val isLoading by homeViewModel.isLoading.collectAsState()
     val contactNames by homeViewModel.contactNames.collectAsState()
+    val contactPresentations by homeViewModel.contactPresentations.collectAsState()
     val selectedIds by homeViewModel.selectedThreadIds.collectAsState()
     val pinnedIds by homeViewModel.pinnedThreadIds.collectAsState()
     val deleting by homeViewModel.isDeletingSelection.collectAsState()
@@ -96,11 +105,32 @@ fun HomeScreen(
     val selectionMode = selectedIds.isNotEmpty()
     val allSelectedPinned = selectionMode && selectedIds.all { it in pinnedIds }
 
-    val filteredConversations = remember(conversations, searchText, contactNames) {
-        if (searchText.isBlank()) conversations else conversations.filter { conversation ->
-            val name = contactNames[HomeViewModel.normalizeAddress(conversation.address)].orEmpty()
-            name.contains(searchText, true) || conversation.address.contains(searchText, true) ||
-                conversation.body.contains(searchText, true)
+    val normalizedAddresses = remember(conversations) {
+        conversations.associate { it.threadId to HomeViewModel.normalizeAddress(it.address) }
+    }
+    val displayNames = remember(conversations, contactNames, normalizedAddresses) {
+        conversations.associate { conversation ->
+            conversation.threadId to (contactNames[normalizedAddresses[conversation.threadId]] ?: conversation.address)
+        }
+    }
+    val contactPhotos = remember(contactPresentations) {
+        contactPresentations.mapValues { it.value.photo?.asImageBitmap() }
+    }
+    val filteredConversations by remember(conversations, searchText, displayNames) {
+        derivedStateOf {
+            if (searchText.isBlank()) conversations else conversations.filter { conversation ->
+                val name = displayNames[conversation.threadId].orEmpty()
+                name.contains(searchText, true) || conversation.address.contains(searchText, true) ||
+                    conversation.body.contains(searchText, true)
+            }
+        }
+    }
+    val visibleIds = remember(filteredConversations) { filteredConversations.mapTo(linkedSetOf()) { it.threadId } }
+    val allVisibleSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
+    var isScrollingToTop by remember { mutableStateOf(false) }
+    val showScrollToTop by remember(listState, selectionMode, isLoading, filteredConversations.isNotEmpty()) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 4 && !selectionMode && !isLoading && filteredConversations.isNotEmpty()
         }
     }
 
@@ -153,6 +183,11 @@ fun HomeScreen(
                             }
                         },
                         actions = {
+                            IconButton(onClick = {
+                                homeViewModel.setVisibleSelection(visibleIds, !allVisibleSelected)
+                            }) {
+                                Icon(Icons.Default.SelectAll, if (allVisibleSelected) "Deselect all" else "Select all")
+                            }
                             IconButton(onClick = homeViewModel::togglePinnedSelection) {
                                 Icon(Icons.Default.PushPin, if (allSelectedPinned) "Unpin" else "Pin")
                             }
@@ -165,12 +200,39 @@ fun HomeScreen(
                         }
                     )
                 } else {
-                    TopBar("Messages") { scope.launch { drawerState.open() } }
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, "Open navigation menu")
+                            }
+                        },
+                        title = { SearchBar(searchText, onValueChange = { searchText = it }) }
+                    )
                 }
             },
             floatingActionButton = {
-                if (!selectionMode) FloatingActionButton(onClick = onNewMessageClick) {
-                    Icon(Icons.Default.Edit, "New Message")
+                if (!selectionMode) Column(
+                    modifier = Modifier.navigationBarsPadding().padding(bottom = 8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (showScrollToTop) {
+                        SmallFloatingActionButton(
+                            onClick = {
+                                if (!isScrollingToTop) scope.launch {
+                                    isScrollingToTop = true
+                                    try { listState.animateScrollToItem(0) } finally { isScrollingToTop = false }
+                                }
+                            },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ) { Icon(Icons.Default.ArrowUpward, "Scroll to top") }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    FloatingActionButton(
+                        onClick = onNewMessageClick,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) { Icon(Icons.Default.Add, "New message") }
                 }
             }
         ) { paddingValues ->
@@ -183,16 +245,19 @@ fun HomeScreen(
                     }
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize().padding(paddingValues)) {
-                    item { SearchBar(searchText) { searchText = it } }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    state = listState
+                ) {
                     items(filteredConversations, key = { it.threadId }) { conversation ->
                         val selected = conversation.threadId in selectedIds
-                        val displayName = contactNames[HomeViewModel.normalizeAddress(conversation.address)] ?: conversation.address
+                        val displayName = displayNames[conversation.threadId] ?: conversation.address
                         ConversationCard(
                             conversation = conversation,
                             displayName = displayName,
                             selected = selected,
                             isPinned = conversation.threadId in pinnedIds,
+                            contactPhoto = contactPhotos[normalizedAddresses[conversation.threadId]],
                             onClick = {
                                 if (selectionMode) homeViewModel.toggleSelection(conversation.threadId)
                                 else onConversationClick(conversation.threadId, displayName, conversation.address)
