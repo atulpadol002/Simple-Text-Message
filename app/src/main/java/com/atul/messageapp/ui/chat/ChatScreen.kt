@@ -17,6 +17,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +59,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -95,8 +104,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextFieldDefaults
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
-import com.atul.messageapp.sms.SmsDeleter
-import com.atul.messageapp.utils.ContactUtils
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 
@@ -114,24 +121,9 @@ fun ChatScreen(
     val context =
         LocalContext.current
 
-    var currentContactName by remember(
-        phoneNumber
-    ) {
-        mutableStateOf(
-            contactName
-        )
-    }
-
     val blockedNumbersPreferences =
         remember(context) {
             BlockedNumbersPreferences(
-                context
-            )
-        }
-
-    val smsDeleter =
-        remember(context) {
-            SmsDeleter(
                 context
             )
         }
@@ -173,6 +165,8 @@ fun ChatScreen(
     var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
     var showDeleteMessagesDialog by remember { mutableStateOf(false) }
     var isDeletingMessages by remember { mutableStateOf(false) }
+    val contactAvatar by chatViewModel.contactAvatar.collectAsState()
+    val isDeletingConversation by chatViewModel.isDeletingConversation.collectAsState()
 
     val selectedScheduledMessage =
         remember {
@@ -228,43 +222,6 @@ fun ChatScreen(
         SmsEventBus.events.collectLatest {
 
             chatViewModel.refreshMessages()
-        }
-    }
-
-    DisposableEffect(
-        lifecycleOwner,
-        phoneNumber,
-        context
-
-    ) {
-
-        val observer =
-            LifecycleEventObserver { _, event ->
-
-                if (
-                    event ==
-                    Lifecycle.Event.ON_RESUME
-                ) {
-
-                    coroutineScope.launch {
-                        currentContactName =
-                            withContext(Dispatchers.IO) {
-                                ContactUtils.getContactName(
-                                    context = context,
-                                    phoneNumber = phoneNumber
-                                )
-                            }
-                    }
-                }
-            }
-
-        lifecycleOwner.lifecycle
-            .addObserver(observer)
-
-        onDispose {
-
-            lifecycleOwner.lifecycle
-                .removeObserver(observer)
         }
     }
 
@@ -334,16 +291,24 @@ fun ChatScreen(
                 )
             } else {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            "Back",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                },
                 title = {
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                MaterialTheme
-                                    .colorScheme
-                                    .primaryContainer
-                            )
                             .padding(
                                 end = 4.dp,
                                 top = 6.dp,
@@ -352,31 +317,6 @@ fun ChatScreen(
                         verticalAlignment =
                             Alignment.CenterVertically
                     ) {
-
-                        IconButton(
-                            modifier =
-                                Modifier.size(40.dp),
-                            onClick =
-                                onBackClick
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.AutoMirrored
-                                        .Filled.ArrowBack,
-                                contentDescription =
-                                    "Back",
-                                tint =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimaryContainer
-                            )
-                        }
-
-                        Spacer(
-                            modifier =
-                                Modifier.width(4.dp)
-                        )
 
                         Box(
                             modifier = Modifier
@@ -390,18 +330,26 @@ fun ChatScreen(
                             contentAlignment =
                                 Alignment.Center
                         ) {
-
-                            Text(
-                                text = currentContactName,
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimaryContainer,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            val photo = contactAvatar.photo
+                            if (photo != null) {
+                                Image(
+                                    bitmap = photo.asImageBitmap(),
+                                    contentDescription = "Contact photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                val avatarText = meaningfulInitial(
+                                    contactAvatar.displayName.ifBlank { contactName },
+                                    phoneNumber
+                                )
+                                Text(
+                                    text = avatarText,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
 
                         Spacer(
@@ -416,7 +364,7 @@ fun ChatScreen(
 
                             Text(
                                 text =
-                                    contactName,
+                                    contactAvatar.displayName.ifBlank { contactName },
                                 color =
                                     MaterialTheme
                                         .colorScheme
@@ -609,13 +557,15 @@ fun ChatScreen(
                 }
             )
             }
-        }
+        },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
         ) {
 
             LazyColumn(
@@ -752,10 +702,9 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .imePadding()
                     .padding(
                         horizontal = 12.dp,
-                        vertical = 10.dp
+                        vertical = 6.dp
                     ),
                 verticalAlignment =
                     Alignment.CenterVertically
@@ -1112,7 +1061,7 @@ fun ChatScreen(
                 contactName =
                     scheduledSms.contactName
                         .ifBlank {
-                            currentContactName },
+                            contactAvatar.displayName.ifBlank { contactName } },
                 phoneNumber =
                     scheduledSms.phoneNumber,
                 initialMessage =
@@ -1186,49 +1135,30 @@ fun ChatScreen(
                 AlertDialog(
                     onDismissRequest = {
 
-                        showDeleteConversationDialog.value =
-                            false
+                        if (!isDeletingConversation) showDeleteConversationDialog.value = false
                     },
                     title = {
 
                         Text(
-                            text = "Delete conversation?"
+                            text = "Delete"
                         )
                     },
                     text = {
 
                         Text(
                             text =
-                                "All messages in this conversation will be permanently deleted."
+                                "Are you sure you want to delete this conversation?"
                         )
                     },
                     confirmButton = {
 
                         TextButton(
+                            enabled = !isDeletingConversation,
                             onClick = {
-
-                                val deleted =
-                                    smsDeleter
-                                        .deleteConversation(
-                                            conversationId
-                                        )
-
-                                showDeleteConversationDialog.value =
-                                    false
-
-                                Toast.makeText(
-                                    context,
-                                    if (deleted) {
-                                        "Conversation deleted"
-                                    } else {
-                                        "Unable to delete conversation"
-                                    },
-                                    Toast.LENGTH_SHORT
-                                ).show()
-
-                                if (deleted) {
-
-                                    onBackClick()
+                                chatViewModel.deleteConversation(conversationId) { deleted ->
+                                    showDeleteConversationDialog.value = false
+                                    Toast.makeText(context, if (deleted) "Conversation deleted" else "Unable to delete conversation", Toast.LENGTH_SHORT).show()
+                                    if (deleted) onBackClick()
                                 }
                             }
                         ) {
@@ -1245,6 +1175,7 @@ fun ChatScreen(
                     dismissButton = {
 
                         TextButton(
+                            enabled = !isDeletingConversation,
                             onClick = {
 
                                 showDeleteConversationDialog.value =
@@ -1259,6 +1190,13 @@ fun ChatScreen(
                     }
                 )
             }    }
+}
+
+private fun meaningfulInitial(displayName: String, phoneNumber: String): String {
+    return displayName.firstOrNull { it.isLetterOrDigit() }
+        ?.uppercaseChar()?.toString()
+        ?: phoneNumber.firstOrNull { !it.isWhitespace() }?.toString()
+        ?: "?"
 }
 
 @Composable

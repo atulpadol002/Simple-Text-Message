@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
+import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.atul.messageapp.data.model.Message
@@ -15,6 +16,9 @@ import com.atul.messageapp.data.preferences.ScheduledSmsPreferences
 import com.atul.messageapp.data.preferences.StarredMessagesPreferences
 import com.atul.messageapp.data.repository.MessageRepository
 import com.atul.messageapp.sms.ScheduledSmsScheduler
+import com.atul.messageapp.sms.SmsDeleter
+import com.atul.messageapp.utils.getContactName
+import com.atul.messageapp.utils.ContactPresentationResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -48,6 +52,15 @@ class ChatViewModel(
         ScheduledSmsScheduler(
             appContext
         )
+
+    private val smsDeleter = SmsDeleter(appContext)
+    private val contactPresentationResolver = ContactPresentationResolver(appContext)
+
+    data class ContactAvatarState(val displayName: String = "", val photo: Bitmap? = null)
+    private val _contactAvatar = MutableStateFlow(ContactAvatarState())
+    val contactAvatar: StateFlow<ContactAvatarState> = _contactAvatar.asStateFlow()
+    private val _isDeletingConversation = MutableStateFlow(false)
+    val isDeletingConversation: StateFlow<Boolean> = _isDeletingConversation.asStateFlow()
 
     private val _messages =
         MutableStateFlow<List<Message>>(
@@ -86,6 +99,7 @@ class ChatViewModel(
 
     private var pendingThreadIdMessageId:
             Long? = null
+    private val pendingTerminalStatuses = mutableMapOf<Long, MessageStatus>()
 
     private val smsContentObserver =
         object : ContentObserver(
@@ -152,6 +166,8 @@ class ChatViewModel(
         currentPhoneNumber =
             phoneNumber
 
+        loadContactAvatar(phoneNumber)
+
         loadScheduledMessages(
             phoneNumber
         )
@@ -182,8 +198,7 @@ class ChatViewModel(
                 currentConversationId ==
                 conversationId
             ) {
-                _messages.value =
-                    result
+                _messages.value = mergeProviderMessages(result)
             }
         }
     }
@@ -228,8 +243,7 @@ class ChatViewModel(
                 currentConversationId ==
                 conversationId
             ) {
-                _messages.value =
-                    result
+                _messages.value = mergeProviderMessages(result)
             }
         }
     }
@@ -725,6 +739,26 @@ class ChatViewModel(
         return changed
     }
 
+    private fun loadContactAvatar(phoneNumber: String) {
+        viewModelScope.launch {
+            _contactAvatar.value = withContext(Dispatchers.IO) {
+                contactPresentationResolver.resolve(phoneNumber).let {
+                    ContactAvatarState(it.displayName, it.photo)
+                }
+            }
+        }
+    }
+
+    fun deleteConversation(threadId: Long, onComplete: (Boolean) -> Unit) {
+        if (threadId <= 0L || _isDeletingConversation.value) return
+        _isDeletingConversation.value = true
+        viewModelScope.launch {
+            val deleted = withContext(Dispatchers.IO) { smsDeleter.deleteConversation(threadId) }
+            _isDeletingConversation.value = false
+            onComplete(deleted)
+        }
+    }
+
     fun setMessagesStarred(
         messages: List<Message>,
         starred: Boolean
@@ -970,8 +1004,7 @@ class ChatViewModel(
                     currentConversationId ==
                     conversationId
                 ) {
-                    _messages.value =
-                        refreshedMessages
+                    _messages.value = mergeProviderMessages(refreshedMessages)
                 }
             }
         }
@@ -1038,6 +1071,10 @@ class ChatViewModel(
                 }
         )
 
+        if (isPersistedId(messageId)) {
+            pendingTerminalStatuses[messageId] = if (confirmedSent) MessageStatus.SENT else MessageStatus.FAILED
+        }
+
         if (
             isPersistedId(
                 messageId
@@ -1046,7 +1083,7 @@ class ChatViewModel(
 
             viewModelScope.launch {
 
-                withContext(
+                val updated = withContext(
                     Dispatchers.IO
                 ) {
 
@@ -1063,6 +1100,15 @@ class ChatViewModel(
                             .markMessageFailed(
                                 messageId
                             )
+                    }
+                }
+                if (updated) {
+                    val persisted = withContext(Dispatchers.IO) { repository.getMessage(messageId) }
+                    if (persisted != null) {
+                        _messages.value = _messages.value.map { if (it.id == messageId) persisted else it }
+                        if (persisted.status == pendingTerminalStatuses[messageId]) {
+                            pendingTerminalStatuses.remove(messageId)
+                        }
                     }
                 }
             }
@@ -1104,8 +1150,7 @@ class ChatViewModel(
                     currentConversationId ==
                     conversationId
                 ) {
-                    _messages.value =
-                        refreshedMessages
+                    _messages.value = mergeProviderMessages(refreshedMessages)
                 }
 
                 currentPhoneNumber
@@ -1117,6 +1162,13 @@ class ChatViewModel(
                         )
                     }
             }
+    }
+
+    private fun mergeProviderMessages(providerMessages: List<Message>): List<Message> {
+        if (pendingTerminalStatuses.isEmpty()) return providerMessages
+        return providerMessages.map { message ->
+            pendingTerminalStatuses[message.id]?.let { message.copy(status = it) } ?: message
+        }
     }
 
     private suspend fun resolveCurrentConversationId(

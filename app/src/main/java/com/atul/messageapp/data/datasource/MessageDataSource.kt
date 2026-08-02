@@ -10,6 +10,32 @@ class MessageDataSource(
     private val context: Context
 ) {
 
+    fun getMessage(messageId: Long): Message? {
+        return try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID, Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE, Telephony.Sms.READ
+                ),
+                "${Telephony.Sms._ID}=?", arrayOf(messageId.toString()), null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val type = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE))
+                Message(
+                    id = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms._ID)),
+                    conversationId = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)),
+                    phoneNumber = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)).orEmpty(),
+                    body = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)).orEmpty(),
+                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)),
+                    isIncoming = type == Telephony.Sms.MESSAGE_TYPE_INBOX,
+                    isRead = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1,
+                    status = statusForType(type)
+                )
+            }
+        } catch (_: Exception) { null }
+    }
+
     fun getMessages(conversationId: Long): List<Message> {
 
         val messages = mutableListOf<Message>()
@@ -59,21 +85,7 @@ class MessageDataSource(
                         it.getColumnIndexOrThrow(Telephony.Sms.READ)
                     ) == 1
 
-                    val status = when (type) {
-
-                        Telephony.Sms.MESSAGE_TYPE_OUTBOX,
-                        Telephony.Sms.MESSAGE_TYPE_QUEUED ->
-                            MessageStatus.SENDING
-
-                        Telephony.Sms.MESSAGE_TYPE_SENT ->
-                            MessageStatus.SENT
-
-                        Telephony.Sms.MESSAGE_TYPE_FAILED ->
-                            MessageStatus.FAILED
-
-                        else ->
-                            MessageStatus.NONE
-                    }
+                    val status = statusForType(type)
 
                     messages.add(
                         Message(
@@ -302,5 +314,13 @@ class MessageDataSource(
             exception.printStackTrace()
             false
         }
+    }
+
+    private fun statusForType(type: Int): MessageStatus = when (type) {
+        Telephony.Sms.MESSAGE_TYPE_OUTBOX,
+        Telephony.Sms.MESSAGE_TYPE_QUEUED -> MessageStatus.SENDING
+        Telephony.Sms.MESSAGE_TYPE_SENT -> MessageStatus.SENT
+        Telephony.Sms.MESSAGE_TYPE_FAILED -> MessageStatus.FAILED
+        else -> MessageStatus.NONE
     }
 }

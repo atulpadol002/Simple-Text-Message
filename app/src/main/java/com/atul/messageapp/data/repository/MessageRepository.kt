@@ -27,6 +27,8 @@ class MessageRepository(
         )
     }
 
+    fun getMessage(messageId: Long): Message? = dataSource.getMessage(messageId)
+
     fun insertOutgoingMessage(
         phoneNumber: String,
         body: String
