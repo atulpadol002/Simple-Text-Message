@@ -1,9 +1,11 @@
 package com.atul.messageapp.ui.newmessage
 
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.ui.components.ContactCard
 import com.atul.messageapp.viewmodel.ContactViewModel
+import com.atul.messageapp.viewmodel.ContactUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,7 +32,8 @@ fun NewMessageScreen(
     onContactClick: (String, String) -> Unit
 ) {
     val viewModel: ContactViewModel = viewModel()
-    val contacts by viewModel.contacts.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val contacts = (uiState as? ContactUiState.Content)?.contacts.orEmpty()
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -39,13 +43,16 @@ fun NewMessageScreen(
         }
     }
     fun exitSearch() { searching = false; query = "" }
-    BackHandler(enabled = searching) { exitSearch() }
+    fun handleBack() {
+        if (searching) exitSearch() else onBackClick()
+    }
+    BackHandler { handleBack() }
     LaunchedEffect(searching) { if (searching) focusRequester.requestFocus() }
 
     Scaffold(topBar = {
         TopAppBar(
             navigationIcon = {
-                IconButton(onClick = { if (searching) exitSearch() else onBackClick() }) {
+                IconButton(onClick = { handleBack() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, if (searching) "Close search" else "Back")
                 }
             },
@@ -71,17 +78,37 @@ fun NewMessageScreen(
             }
         )
     }) { padding ->
-        if (contacts.isEmpty()) {
+        when (uiState) {
+        ContactUiState.InitialLoading -> {
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) { CircularProgressIndicator() }
+        }
+        ContactUiState.Empty -> {
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) { Text("No contacts available", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        } else {
+        }
+        ContactUiState.Error -> {
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    Text("Unable to load contacts", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = viewModel::loadContacts) { Text("Retry") }
+                }
+            }
+        }
+        is ContactUiState.Content -> {
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                 items(filtered, key = { it.phoneNumber }) { contact ->
                     ContactCard(contact) { onContactClick(contact.name, contact.phoneNumber) }
                 }
             }
+        }
         }
     }
 }
