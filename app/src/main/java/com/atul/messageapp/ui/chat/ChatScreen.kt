@@ -154,11 +154,6 @@ fun ChatScreen(
             mutableStateOf(false)
         }
 
-    val showDeleteConversationDialog =
-        remember {
-            mutableStateOf(false)
-        }
-
     val lifecycleOwner =
         LocalLifecycleOwner.current
 
@@ -203,8 +198,6 @@ fun ChatScreen(
     val routeContactAvatar = contactAvatar.takeIf {
         it.conversationId == conversationId && it.phoneNumber == phoneNumber
     }
-    val isDeletingConversation by chatViewModel.isDeletingConversation.collectAsState()
-
     val selectedScheduledMessage =
         remember {
             mutableStateOf<ScheduledSms?>(null)
@@ -726,41 +719,6 @@ fun ChatScreen(
                                     }
                                 )
 
-                                DropdownMenuItem(
-                                    text = {
-
-                                        Text(
-                                            text =
-                                                "Delete conversation",
-                                            color =
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .error
-                                        )
-                                    },
-                                    leadingIcon = {
-
-                                        Icon(
-                                            imageVector =
-                                                Icons.Default.Delete,
-                                            contentDescription =
-                                                null,
-                                            tint =
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .error
-                                        )
-                                    },
-                                    onClick = {
-
-                                        showMoreMenu.value =
-                                            false
-
-                                        showDeleteConversationDialog
-                                            .value =
-                                            true
-                                    }
-                                )
                             }
                         }
                     }
@@ -1362,73 +1320,7 @@ fun ChatScreen(
                     }
                 }
             )
-            if (
-                showDeleteConversationDialog.value
-            ) {
-
-                AlertDialog(
-                    onDismissRequest = {
-
-                        if (!isDeletingConversation) showDeleteConversationDialog.value = false
-                    },
-                    title = {
-
-                        Text(
-                            text = "Delete conversation?",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                    },
-                    text = {
-
-                        Text(
-                            text =
-                                "This conversation will be moved to Recycle Bin.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    confirmButton = {
-
-                        TextButton(
-                            enabled = !isDeletingConversation,
-                            onClick = {
-                                chatViewModel.deleteConversation(conversationId) { deleted ->
-                                    if (deleted) {
-                                        showDeleteConversationDialog.value = false
-                                        onConversationDeleted()
-                                    } else {
-                                        Toast.makeText(context, "Unable to delete conversation", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        ) {
-
-                            Text(
-                                text = "Delete",
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .error
-                            )
-                        }
-                    },
-                    dismissButton = {
-
-                        TextButton(
-                            enabled = !isDeletingConversation,
-                            onClick = {
-
-                                showDeleteConversationDialog.value =
-                                    false
-                            }
-                        ) {
-
-                            Text(
-                                text = "Cancel"
-                            )
-                        }
-                    }
-                )
-            }    }
+            }
 }
 
 private fun meaningfulInitial(displayName: String, phoneNumber: String): String {
