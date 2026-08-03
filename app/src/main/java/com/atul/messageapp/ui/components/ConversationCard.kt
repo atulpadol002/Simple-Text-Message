@@ -15,8 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,34 +62,24 @@ fun ConversationCard(
         ?: conversation.address.firstOrNull { !it.isWhitespace() }?.toString()
         ?: "?"
 
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                horizontal = 12.dp,
-                vertical = 5.dp
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.surface
             )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 1.dp
-        )
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
-                    horizontal = 12.dp,
-                    vertical = 10.dp
+                    horizontal = 16.dp,
+                    vertical = 12.dp
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -217,5 +206,9 @@ fun ConversationCard(
                 }
             }
         }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 66.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     }
 }

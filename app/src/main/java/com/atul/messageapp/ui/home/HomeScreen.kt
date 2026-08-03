@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -68,6 +69,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -98,6 +100,8 @@ fun HomeScreen(
 ) {
     val homeViewModel: HomeViewModel = viewModel()
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val drawerWidth = (configuration.screenWidthDp.dp * 0.6f).coerceIn(240.dp, 360.dp)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -224,7 +228,10 @@ fun HomeScreen(
         drawerState = drawerState,
         gesturesEnabled = canInteract && !selectionMode,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                modifier = Modifier.width(drawerWidth),
+                drawerContainerColor = MaterialTheme.colorScheme.surface
+            ) {
                 DrawerHeader()
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                 Spacer(Modifier.height(10.dp))
@@ -389,8 +396,8 @@ private fun DrawerHeader() {
             contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(R.drawable.message_app_logo),
-                contentDescription = "Message App logo",
+                painter = painterResource(R.drawable.message_logo_symbol),
+                contentDescription = "MESSAGE logo",
                 modifier = Modifier.size(48.dp),
                 contentScale = ContentScale.Fit
             )
