@@ -1,6 +1,8 @@
 plugins {
         alias(libs.plugins.android.application)
         alias(libs.plugins.kotlin.compose)
+        alias(libs.plugins.google.services)
+        alias(libs.plugins.firebase.crashlytics)
 
 }
 
@@ -38,6 +40,10 @@ android {
 }
 
 dependencies {
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.crashlytics)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

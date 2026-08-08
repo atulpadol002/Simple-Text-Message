@@ -1,0 +1,31 @@
+
+
+{
+  "project_info": {
+    "project_number": "607554418102",
+    "project_id": "message-app-d32a8",
+    "storage_bucket": "message-app-d32a8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:607554418102:android:c910f8af92da7700583d17",
+        "android_client_info": {
+          "package_name": "com.ap.messages"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3J_hAvzKYlriJbQtiap6UQvozbD9UF4I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
