@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.atul.messageapp"
+    namespace = "com.ap.messages"
 
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.atul.messageapp"
+        applicationId = "com.ap.messages"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

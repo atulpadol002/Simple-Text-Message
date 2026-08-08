@@ -1,4 +1,4 @@
-package com.atul.messageapp.contact
+package com.ap.messages.contact
 
 import android.content.Context
 import android.provider.ContactsContract

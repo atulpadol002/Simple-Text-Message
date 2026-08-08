@@ -1,28 +1,22 @@
-package com.ap.messages.sms
+package com.ap.messages.data.datasource
 
 import android.content.Context
 import android.provider.Telephony
 import com.ap.messages.data.model.Conversation
-import com.ap.messages.contact.ContactNameResolver
+import com.ap.messages.utils.ContactUtils
 
-class SmsReader(
+class ConversationDataSource(
     private val context: Context
 ) {
 
     fun getConversations(): List<Conversation> {
 
         val conversations = mutableListOf<Conversation>()
-        val contactResolver = ContactNameResolver(context)
-        val projection = arrayOf(
-            Telephony.Sms.THREAD_ID,
-            Telephony.Sms.ADDRESS,
-            Telephony.Sms.BODY,
-            Telephony.Sms.DATE
-        )
+        val addedThreads = mutableSetOf<Long>()
 
         val cursor = context.contentResolver.query(
             Telephony.Sms.CONTENT_URI,
-            projection,
+            null,
             null,
             null,
             "${Telephony.Sms.DATE} DESC"
@@ -30,24 +24,20 @@ class SmsReader(
 
         cursor?.use {
 
-            val addedThreads = mutableSetOf<Long>()
-
             while (it.moveToNext()) {
 
                 val threadId = it.getLong(
                     it.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)
                 )
 
-                if (addedThreads.contains(threadId)) {
+                if (addedThreads.contains(threadId))
                     continue
-                }
 
                 addedThreads.add(threadId)
 
                 val address = it.getString(
                     it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
                 ) ?: "Unknown"
-                val contactName = contactResolver.getContactName(address)
 
                 val body = it.getString(
                     it.getColumnIndexOrThrow(Telephony.Sms.BODY)
@@ -62,7 +52,10 @@ class SmsReader(
                     Conversation(
                         id = threadId,
                         phoneNumber = address,
-                        name = contactName,
+                        name = ContactUtils.getContactName(
+                            context,
+                            address
+                        ),
                         lastMessage = body,
                         lastMessageTime = date,
                         unreadCount = 0
@@ -75,7 +68,6 @@ class SmsReader(
         }
 
         return conversations
-
     }
 
 }

@@ -1,9 +1,9 @@
-package com.atul.messageapp.data.datasource
+package com.ap.messages.data.datasource
 
 import android.content.ContentResolver
 import android.content.Context
 import android.provider.Telephony
-import com.atul.messageapp.data.model.Message
+import com.ap.messages.data.model.Message
 
 class SmsDataSource(
     private val context: Context

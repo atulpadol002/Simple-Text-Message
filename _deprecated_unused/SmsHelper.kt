@@ -1,4 +1,4 @@
-package com.atul.messageapp.utils
+package com.ap.messages.utils
 
 import android.telephony.SmsManager
 
