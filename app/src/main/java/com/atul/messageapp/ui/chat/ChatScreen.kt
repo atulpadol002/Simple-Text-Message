@@ -382,10 +382,25 @@ fun ChatScreen(
         }
     }
 
-    DisposableEffect(Unit) {
-        MessageNotificationManager.setActiveThread(conversationId)
+    DisposableEffect(lifecycleOwner, conversationId, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME ->
+                    MessageNotificationManager.activateThread(context, conversationId)
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP,
+                Lifecycle.Event.ON_DESTROY ->
+                    MessageNotificationManager.deactivateThread(conversationId)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState == Lifecycle.State.RESUMED) {
+            MessageNotificationManager.activateThread(context, conversationId)
+        }
         onDispose {
-            MessageNotificationManager.setActiveThread(null)
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            MessageNotificationManager.deactivateThread(conversationId)
             searchScrollJob?.cancel()
         }
     }

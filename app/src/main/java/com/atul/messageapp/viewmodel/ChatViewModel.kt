@@ -187,13 +187,7 @@ class ChatViewModel(
             return
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repository.markThreadAsRead(conversationId)) {
-                SmsEventBus.notifyThreadRead(conversationId)
-                MessageNotificationManager.cancelThread(appContext, conversationId)
-                updateNotificationUnreadCount()
-            }
-        }
+        consumeAndMarkThreadRead(conversationId)
 
         viewModelScope.launch {
 
@@ -228,6 +222,8 @@ class ChatViewModel(
             return
         }
 
+        consumeAndMarkThreadRead(conversationId)
+
         loadStarredMessageIds()
 
         currentPhoneNumber?.let {
@@ -244,12 +240,6 @@ class ChatViewModel(
                 withContext(
                     Dispatchers.IO
                 ) {
-
-                    if (repository.markThreadAsRead(conversationId)) {
-                        SmsEventBus.notifyThreadRead(conversationId)
-                        MessageNotificationManager.cancelThread(appContext, conversationId)
-                        updateNotificationUnreadCount()
-                    }
 
                     repository.getMessages(
                         conversationId
@@ -767,6 +757,25 @@ class ChatViewModel(
     private suspend fun updateNotificationUnreadCount() {
         val total = smsRepository.getConversations().sumOf { it.unreadCount }
         MessageNotificationManager.updateUnreadCount(appContext, total)
+    }
+
+    private fun consumeAndMarkThreadRead(conversationId: Long) {
+        MessageNotificationManager.consumeThread(appContext, conversationId)
+        SmsEventBus.notifyThreadRead(conversationId)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.markThreadAsRead(conversationId)
+                updateNotificationUnreadCount()
+                SmsEventBus.notifyThreadRead(
+                    threadId = conversationId,
+                    providerCommitted = true
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                exception.printStackTrace()
+            }
+        }
     }
 
     private fun loadContactAvatar(

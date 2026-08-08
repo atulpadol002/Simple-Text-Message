@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Telephony
-import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import com.atul.messageapp.notifications.MessageNotificationManager
 import com.atul.messageapp.data.repository.SmsRepository
@@ -73,6 +72,7 @@ class SmsReceiver : BroadcastReceiver() {
         val timestamp =
             smsMessages.first()
                 .timestampMillis
+        val receivedAt = System.currentTimeMillis()
 
         val pendingResult = goAsync()
 
@@ -135,21 +135,22 @@ class SmsReceiver : BroadcastReceiver() {
                     insertedUri = insertedUri
                 )
 
-            if (threadId != null) {
-
-                ArchivePreferences(
-                    context.applicationContext
-                ).unarchiveConversation(
-                    threadId
-                )
-            }
-
             if (threadId == null) return@launch
             SmsEventBus.notifySmsReceived(threadId)
+            val notificationToken = MessageNotificationManager.beginIncoming(
+                threadId = threadId,
+                messageTimestamp = timestamp,
+                receivedAt = receivedAt
+            ) ?: return@launch
             val presentation = ContactPresentationResolver(context).resolve(sender)
             val totalUnread = SmsRepository(context).getConversations().sumOf { it.unreadCount }
             MessageNotificationManager.showIncoming(
-                context.applicationContext, threadId, presentation.displayName, sender, messageBody, totalUnread
+                context = context.applicationContext,
+                token = notificationToken,
+                name = presentation.displayName,
+                address = sender,
+                body = messageBody,
+                totalUnread = totalUnread
             )
 
             } catch (exception: CancellationException) {

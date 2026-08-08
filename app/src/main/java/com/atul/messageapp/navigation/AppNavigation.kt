@@ -12,9 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import android.provider.Telephony
+import com.atul.messageapp.AppPermissionState
 import com.atul.messageapp.MainActivity
 import com.atul.messageapp.PendingChatDestination
-import com.atul.messageapp.sms.DefaultSmsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,13 +55,20 @@ fun AppNavigation(
         activity?.pendingChatDestination ?: MutableStateFlow(null)
     }
     val pendingDestination by pendingDestinationFlow.collectAsState()
+    val permissionStateFlow = remember(activity) {
+        activity?.permissionState ?: MutableStateFlow(AppPermissionState())
+    }
+    val permissionState by permissionStateFlow.collectAsState()
     val initialPendingDestination = remember(activity) {
         activity?.pendingChatDestination?.value
     }
-    val initialChatRoute = remember(initialPendingDestination, context) {
+    val initialChatRoute = remember(
+        initialPendingDestination,
+        permissionState.hasCoreMessagingAccess
+    ) {
         initialPendingDestination
             ?.takeIf {
-                it.threadId > 0L && DefaultSmsManager(context).isDefaultSmsApp()
+                it.threadId > 0L && permissionState.hasCoreMessagingAccess
             }
             ?.toChatRoute()
     }
@@ -73,6 +80,46 @@ fun AppNavigation(
             ?.route
 
     val navigationInProgress = remember { mutableStateOf(false) }
+
+    LaunchedEffect(permissionState.revision, currentRoute) {
+        val hostActivity = activity ?: return@LaunchedEffect
+        val route = currentRoute ?: return@LaunchedEffect
+
+        if (!permissionState.hasCoreMessagingAccess) {
+            if (route == Routes.Permission.route) {
+                if (permissionState.isDefaultSmsApp) {
+                    hostActivity.requestNextPermissionStep()
+                }
+                return@LaunchedEffect
+            }
+            if (route != Routes.Splash.route) {
+                val hasHomeDestination = runCatching {
+                    navController.getBackStackEntry(Routes.Home.route)
+                }.isSuccess
+                navController.navigate(Routes.Permission.route) {
+                    launchSingleTop = true
+                    if (hasHomeDestination) {
+                        popUpTo(Routes.Home.route) { inclusive = true }
+                    } else {
+                        popUpTo(route) { inclusive = true }
+                    }
+                }
+            }
+            return@LaunchedEffect
+        }
+
+        if (route == Routes.Permission.route) {
+            navController.navigate(Routes.Home.route) {
+                popUpTo(Routes.Permission.route) { inclusive = true }
+                launchSingleTop = true
+            }
+            return@LaunchedEffect
+        }
+
+        if (route != Routes.Splash.route) {
+            hostActivity.requestNextPermissionStep()
+        }
+    }
 
     LaunchedEffect(pendingDestination, currentRoute) {
         val destination = pendingDestination ?: return@LaunchedEffect
@@ -91,7 +138,7 @@ fun AppNavigation(
             currentRoute == null ||
             currentRoute == Routes.Splash.route ||
             currentRoute == Routes.Permission.route ||
-            !DefaultSmsManager(context).isDefaultSmsApp()
+            !permissionState.hasCoreMessagingAccess
         ) return@LaunchedEffect
 
         val resolvedDestination = if (destination.threadId > 0L) {
@@ -127,12 +174,6 @@ fun AppNavigation(
         hostActivity.consumePendingChat(destination)
     }
 
-    LaunchedEffect(currentRoute, pendingDestination) {
-        if (currentRoute == Routes.Home.route && pendingDestination == null) {
-            activity?.requestNotificationPermissionAtAppEntry()
-        }
-    }
-
     NavHost(
         navController = navController,
         startDestination = initialChatRoute ?: Routes.Splash.route,
@@ -153,7 +194,11 @@ fun AppNavigation(
                 },
                 onDirectHome = {
                     navController.navigate(
-                        Routes.Home.route
+                        if (permissionState.hasCoreMessagingAccess) {
+                            Routes.Home.route
+                        } else {
+                            Routes.Permission.route
+                        }
                     ) {
                         popUpTo(
                             Routes.Splash.route
@@ -169,17 +214,14 @@ fun AppNavigation(
             Routes.Permission.route
         ) {
             PermissionScreen(
-                onPermissionGranted = {
-                    navController.navigate(
-                        Routes.Home.route
-                    ) {
-                        popUpTo(
-                            Routes.Splash.route
-                        ) {
-                            inclusive = true
-                        }
-                    }
-                }
+                isDefaultSmsApp = permissionState.isDefaultSmsApp,
+                missingSmsPermissions = permissionState.missingSmsPermissions,
+                onPermissionStateChanged = activity?.let { hostActivity ->
+                    hostActivity::refreshPermissionsAfterRoleRequest
+                } ?: {},
+                onRequestSmsPermissions = activity?.let { hostActivity ->
+                    hostActivity::requestSmsPermissionsFromUser
+                } ?: {}
             )
         }
 
@@ -391,13 +433,53 @@ fun AppNavigation(
         }
     }
 
-    if (activity?.showNotificationSettingsPrompt == true) {
+    if (activity?.showSmsSettingsPrompt == true) {
         AlertDialog(
-            onDismissRequest = activity::dismissNotificationSettingsPrompt,
-            title = { Text("Enable message notifications") },
+            onDismissRequest = activity::dismissSmsSettingsPrompt,
+            title = { Text("Allow SMS access") },
             text = {
                 Text(
-                    "Notification permission is currently disabled. You can enable it in app settings; messaging will continue to work either way."
+                    "To send and receive messages, allow the required SMS permissions in system settings."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = activity::openSmsSettings) {
+                    Text("Open settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = activity::dismissSmsSettingsPrompt) {
+                    Text("Not now")
+                }
+            }
+        )
+    } else if (activity?.showContactsSettingsPrompt == true) {
+        AlertDialog(
+            onDismissRequest = activity::dismissContactsSettingsPrompt,
+            title = { Text("Allow contacts access") },
+            text = {
+                Text(
+                    "To show contact names and photos, allow Contacts permission in system settings."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = activity::openContactsSettings) {
+                    Text("Open settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = activity::dismissContactsSettingsPrompt) {
+                    Text("Not now")
+                }
+            }
+        )
+    } else if (activity?.showNotificationSettingsPrompt == true) {
+        AlertDialog(
+            onDismissRequest = activity::dismissNotificationSettingsPrompt,
+            title = { Text("Enable notifications") },
+            text = {
+                Text(
+                    "Allow notifications to receive incoming message alerts."
                 )
             },
             confirmButton = {

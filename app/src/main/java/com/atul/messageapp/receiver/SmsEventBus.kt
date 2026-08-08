@@ -8,7 +8,10 @@ object SmsEventBus {
 
     sealed interface Event {
         data class SmsChanged(val threadId: Long) : Event
-        data class ThreadRead(val threadId: Long) : Event
+        data class ThreadRead(
+            val threadId: Long,
+            val providerCommitted: Boolean = false
+        ) : Event
         data object ConversationDeleted : Event
         data object ConversationUnblocked : Event
         data class ConversationBlocked(val address: String) : Event
@@ -25,7 +28,10 @@ object SmsEventBus {
         _events.asSharedFlow()
 
     fun notifySmsReceived(threadId: Long) = emit(Event.SmsChanged(threadId))
-    fun notifyThreadRead(threadId: Long) = emit(Event.ThreadRead(threadId))
+    fun notifyThreadRead(
+        threadId: Long,
+        providerCommitted: Boolean = false
+    ) = emit(Event.ThreadRead(threadId, providerCommitted))
 
     fun notifyConversationDeleted() = emit(Event.ConversationDeleted)
 

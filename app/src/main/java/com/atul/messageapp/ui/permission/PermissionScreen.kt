@@ -1,7 +1,5 @@
 package com.atul.messageapp.ui.permission
 
-import android.Manifest
-import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -34,52 +32,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.atul.messageapp.R
 import com.atul.messageapp.sms.DefaultSmsManager
 
 @Composable
 fun PermissionScreen(
-    onPermissionGranted: () -> Unit
+    isDefaultSmsApp: Boolean,
+    missingSmsPermissions: List<String>,
+    onPermissionStateChanged: () -> Unit,
+    onRequestSmsPermissions: () -> Unit
 ) {
 
     val context = LocalContext.current
-
     val defaultSmsManager =
         DefaultSmsManager(context)
-
-    val contactsPermissionLauncher =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission()
-        ) {
-            onPermissionGranted()
-        }
-
-    fun continueAfterDefaultRoleGranted() {
-
-        val contactsPermissionGranted =
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_CONTACTS
-            ) == PackageManager.PERMISSION_GRANTED
-
-        if (contactsPermissionGranted) {
-            onPermissionGranted()
-        } else {
-            contactsPermissionLauncher.launch(
-                Manifest.permission.READ_CONTACTS
-            )
-        }
-    }
 
     val roleLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartActivityForResult()
         ) {
-
-            if (defaultSmsManager.isDefaultSmsApp()) {
-                continueAfterDefaultRoleGranted()
-            }
+            onPermissionStateChanged()
         }
 
     Column(
@@ -106,13 +78,21 @@ fun PermissionScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Make Message App your default SMS app",
+                text = if (isDefaultSmsApp) {
+                    "Allow Message App to access SMS"
+                } else {
+                    "Make Message App your default SMS app"
+                },
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "Continue sending, receiving, searching, scheduling and managing all your SMS securely in one place.",
+                text = if (isDefaultSmsApp) {
+                    "The required SMS permissions are needed to display, send and receive your messages."
+                } else {
+                    "Continue sending, receiving, searching, scheduling and managing all your SMS securely in one place."
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -166,20 +146,27 @@ fun PermissionScreen(
                 .height(52.dp),
             shape = RoundedCornerShape(16.dp),
             onClick = {
-
-                if (defaultSmsManager.isDefaultSmsApp()) {
-
-                    continueAfterDefaultRoleGranted()
-
+                if (isDefaultSmsApp) {
+                    if (missingSmsPermissions.isNotEmpty()) {
+                        onRequestSmsPermissions()
+                    } else {
+                        onPermissionStateChanged()
+                    }
                 } else {
-
                     defaultSmsManager
                         .createRequestRoleIntent()
                         ?.let(roleLauncher::launch)
+                        ?: onPermissionStateChanged()
                 }
             }
         ) {
-            Text("Set as Default SMS App")
+            Text(
+                if (isDefaultSmsApp) {
+                    "Allow SMS permissions"
+                } else {
+                    "Set as Default SMS App"
+                }
+            )
         }
     }
 }

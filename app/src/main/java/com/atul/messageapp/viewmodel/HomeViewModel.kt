@@ -140,7 +140,7 @@ class HomeViewModel(
                     when (event) {
                         is SmsEventBus.Event.ThreadRead -> {
                             optimisticallyMarkRead(event.threadId)
-                            loadConversations()
+                            if (event.providerCommitted) loadConversations()
                         }
                         is SmsEventBus.Event.ConversationBlocked -> {
                             val key = blockedNumbersPreferences.normalize(event.address)
