@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 
 class RecycleBinViewModel(
     application: Application
@@ -130,6 +131,34 @@ class RecycleBinViewModel(
             } finally {
                 _processingConversationIds.value -= recycleBinId
             }
+        }
+    }
+
+    fun restoreSelected(ids: Set<Long>) {
+        if (ids.isEmpty() || ids.any { it in _processingConversationIds.value }) return
+        _processingConversationIds.value += ids
+        _restoringConversationIds.value += ids
+        viewModelScope.launch {
+            try {
+                val successful = withContext(Dispatchers.IO) { ids.filter { restoreConversationOnIo(it) }.toSet() }
+                if (successful.isNotEmpty()) {
+                    _deletedConversations.value = _deletedConversations.value.filterNot { it.recycleBinId in successful }
+                    SmsEventBus.notifyConversationRestored()
+                }
+            } catch (e: CancellationException) { throw e }
+            finally { _restoringConversationIds.value -= ids; _processingConversationIds.value -= ids }
+        }
+    }
+
+    fun deleteSelected(ids: Set<Long>) {
+        if (ids.isEmpty() || ids.any { it in _processingConversationIds.value }) return
+        _processingConversationIds.value += ids
+        viewModelScope.launch {
+            try {
+                val successful = withContext(Dispatchers.IO) { ids.filter { recycleBinRepository.deleteSnapshotPermanently(it) }.toSet() }
+                if (successful.isNotEmpty()) _deletedConversations.value = _deletedConversations.value.filterNot { it.recycleBinId in successful }
+            } catch (e: CancellationException) { throw e }
+            finally { _processingConversationIds.value -= ids }
         }
     }
 

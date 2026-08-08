@@ -8,6 +8,10 @@ import android.net.Uri
 import android.provider.Telephony
 import com.atul.messageapp.data.preferences.ArchivePreferences
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
+import com.atul.messageapp.notifications.MessageNotificationManager
+import com.atul.messageapp.data.repository.SmsRepository
+import com.atul.messageapp.utils.ContactPresentationResolver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -140,11 +144,17 @@ class SmsReceiver : BroadcastReceiver() {
                 )
             }
 
-            SmsEventBus.notifySmsReceived()
+            if (threadId == null) return@launch
+            SmsEventBus.notifySmsReceived(threadId)
+            val presentation = ContactPresentationResolver(context).resolve(sender)
+            val totalUnread = SmsRepository(context).getConversations().sumOf { it.unreadCount }
+            MessageNotificationManager.showIncoming(
+                context.applicationContext, threadId, presentation.displayName, sender, messageBody, totalUnread
+            )
 
-            } catch (
-                exception: Exception
-            ) {
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
 
                 exception.printStackTrace()
             } finally {
@@ -183,6 +193,8 @@ class SmsReceiver : BroadcastReceiver() {
                 }
             }
 
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (
             exception: Exception
         ) {

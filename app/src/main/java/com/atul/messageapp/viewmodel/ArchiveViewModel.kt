@@ -78,11 +78,13 @@ class ArchiveViewModel(
         viewModelScope.launch {
             SmsEventBus.events.collectLatest { event ->
                 when (event) {
-                    SmsEventBus.Event.SmsChanged,
+                    is SmsEventBus.Event.SmsChanged,
                     SmsEventBus.Event.ConversationDeleted,
                     SmsEventBus.Event.ConversationUnarchived,
                     SmsEventBus.Event.ConversationRestored -> loadArchivedConversations()
-                    SmsEventBus.Event.ConversationUnblocked -> Unit
+                    SmsEventBus.Event.ConversationUnblocked,
+                    is SmsEventBus.Event.ConversationBlocked,
+                    is SmsEventBus.Event.ThreadRead -> Unit
                 }
             }
         }
@@ -208,6 +210,10 @@ class ArchiveViewModel(
 
     fun clearSelection() {
         _selectedThreadIds.value = emptySet()
+    }
+
+    fun setVisibleSelection(ids: Set<Long>, selected: Boolean) {
+        _selectedThreadIds.value = if (selected) _selectedThreadIds.value + ids else _selectedThreadIds.value - ids
     }
 
     fun unarchiveSelected() {

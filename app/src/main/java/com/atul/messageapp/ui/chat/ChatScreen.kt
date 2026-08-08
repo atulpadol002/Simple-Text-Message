@@ -7,7 +7,13 @@ package com.atul.messageapp.ui.chat
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +22,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
@@ -35,6 +40,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -61,16 +67,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextRange
@@ -88,12 +97,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.data.model.Message
 import com.atul.messageapp.data.model.ScheduledSms
 import com.atul.messageapp.receiver.SmsEventBus
+import com.atul.messageapp.notifications.MessageNotificationManager
 import com.atul.messageapp.ui.components.MessageBubble
 import com.atul.messageapp.ui.components.ScheduledMessageBubble
 import com.atul.messageapp.ui.components.ScheduledMessageEditorDialog
 import com.atul.messageapp.ui.components.ScheduledMessageOptionsDialog
 import com.atul.messageapp.viewmodel.ChatViewModel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,8 +112,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import android.content.Intent
-import android.net.Uri
 import android.provider.ContactsContract
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
@@ -122,10 +131,13 @@ import androidx.compose.material3.TextFieldDefaults
 import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
 import com.atul.messageapp.data.preferences.RecentEmojiPreferences
 import com.atul.messageapp.ui.components.EmojiPicker
+import com.atul.messageapp.utils.ContactUtils
+import com.atul.messageapp.sms.ScheduledSmsScheduler
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 
 @Composable
 fun ChatScreen(
@@ -186,6 +198,21 @@ fun ChatScreen(
         remember {
             mutableStateOf(false)
         }
+    var showExactAlarmExplanation by rememberSaveable { mutableStateOf(false) }
+    var pendingScheduleRequest by rememberSaveable { mutableStateOf(false) }
+    val scheduledSmsScheduler = remember(context) {
+        ScheduledSmsScheduler(context)
+    }
+    val exactAlarmSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (pendingScheduleRequest) {
+            pendingScheduleRequest = false
+            if (scheduledSmsScheduler.canScheduleExactAlarms()) {
+                showScheduleDialog.value = true
+            }
+        }
+    }
 
     var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
     var isSearchMode by remember { mutableStateOf(false) }
@@ -212,6 +239,9 @@ fun ChatScreen(
     chatViewModel.messages
         .collectAsState()
 
+    val isInitialMessageLoadComplete by
+    chatViewModel.isInitialMessageLoadComplete.collectAsState()
+
     val starredMessageIds by
     chatViewModel.starredMessageIds
         .collectAsState()
@@ -222,6 +252,21 @@ fun ChatScreen(
 
     val listState =
         rememberLazyListState()
+
+    var initialPositioningComplete by remember(conversationId, phoneNumber) {
+        mutableStateOf(false)
+    }
+    var previousTotalItems by remember(conversationId, phoneNumber) {
+        mutableStateOf(0)
+    }
+    var followLatestMessage by remember(conversationId, phoneNumber) {
+        mutableStateOf(true)
+    }
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    var previousImeBottom by remember(conversationId, phoneNumber) {
+        mutableStateOf(imeBottom)
+    }
 
     val trimmedSearchQuery by remember {
         derivedStateOf { searchQuery.trim() }
@@ -314,8 +359,33 @@ fun ChatScreen(
         }
     }
 
+    DisposableEffect(lifecycleOwner, scheduledSmsScheduler) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingScheduleRequest) {
+                pendingScheduleRequest = false
+                if (scheduledSmsScheduler.canScheduleExactAlarms()) {
+                    showScheduleDialog.value = true
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(listState, conversationId, phoneNumber) {
+        snapshotFlow {
+            listState.isScrollInProgress to listState.isNearBottom()
+        }.collect { (scrolling, nearBottom) ->
+            if (scrolling) {
+                followLatestMessage = nearBottom
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
+        MessageNotificationManager.setActiveThread(conversationId)
         onDispose {
+            MessageNotificationManager.setActiveThread(null)
             searchScrollJob?.cancel()
         }
     }
@@ -331,40 +401,64 @@ fun ChatScreen(
             initialDisplayName = contactName
         )
 
-        SmsEventBus.events.collectLatest {
-
-            chatViewModel.refreshMessages()
+        SmsEventBus.events.collectLatest { event ->
+            if (event is SmsEventBus.Event.SmsChanged && event.threadId == conversationId) {
+                chatViewModel.refreshMessages()
+            }
         }
     }
 
+    val totalItems =
+        messages.size +
+            scheduledMessages.size +
+            if (scheduledMessages.isNotEmpty()) 1 else 0
+
     LaunchedEffect(
-        messages.size,
-        scheduledMessages.size
+        totalItems,
+        isInitialMessageLoadComplete,
+        isSearchMode,
+        conversationId,
+        phoneNumber
     ) {
-
-        val totalItems =
-            messages.size +
-                    scheduledMessages.size +
-                    if (
-                        scheduledMessages.isNotEmpty()
-                    ) {
-                        1
-                    } else {
-                        0
-                    }
-
-        if (totalItems > 0 && !isSearchMode) {
-
-            if (messages.size > 100) {
-                listState.scrollToItem(
-                    index = totalItems - 1
-                )
-            } else {
-                listState.animateScrollToItem(
-                    index = totalItems - 1
-                )
-            }
+        if (!isInitialMessageLoadComplete) return@LaunchedEffect
+        if (totalItems <= 0) {
+            previousTotalItems = 0
+            return@LaunchedEffect
         }
+
+        if (!initialPositioningComplete) {
+            listState.scrollToItem(totalItems - 1)
+            initialPositioningComplete = true
+            followLatestMessage = true
+        } else if (
+            totalItems > previousTotalItems &&
+            followLatestMessage &&
+            !isSearchMode
+        ) {
+            listState.animateScrollToItem(totalItems - 1)
+        }
+        previousTotalItems = totalItems
+    }
+
+    LaunchedEffect(
+        imeBottom,
+        totalItems,
+        isInitialMessageLoadComplete,
+        initialPositioningComplete,
+        isSearchMode
+    ) {
+        val imeOpened = imeBottom > previousImeBottom
+        if (
+            imeOpened &&
+            totalItems > 0 &&
+            isInitialMessageLoadComplete &&
+            initialPositioningComplete &&
+            followLatestMessage &&
+            !isSearchMode
+        ) {
+            listState.scrollToItem(totalItems - 1)
+        }
+        previousImeBottom = imeBottom
     }
 
     Scaffold(
@@ -651,12 +745,12 @@ fun ChatScreen(
                                         showMoreMenu.value =
                                             false
 
-                                        openContact(
-                                            context =
-                                                context,
-                                            phoneNumber =
-                                                phoneNumber
-                                        )
+                                        coroutineScope.launch {
+                                            openContact(
+                                                context = context,
+                                                phoneNumber = phoneNumber
+                                            )
+                                        }
                                     }
                                 )
 
@@ -696,25 +790,9 @@ fun ChatScreen(
                                         showMoreMenu.value =
                                             false
 
-                                        val blocked =
-                                            blockedNumbersPreferences
-                                                .blockNumber(
-                                                    phoneNumber
-                                                )
-
-                                        Toast.makeText(
-                                            context,
-                                            if (blocked) {
-                                                "Number added to block list"
-                                            } else {
-                                                "Unable to block number"
-                                            },
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-
-                                        if (blocked) {
-
-                                            onBackClick()
+                                        chatViewModel.blockNumber(phoneNumber) { blocked ->
+                                            Toast.makeText(context, if (blocked) "Number added to block list" else "Unable to block number", Toast.LENGTH_SHORT).show()
+                                            if (blocked) onBackClick()
                                         }
                                     }
                                 )
@@ -745,6 +823,12 @@ fun ChatScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = if (
+                            isInitialMessageLoadComplete &&
+                            (totalItems == 0 || initialPositioningComplete)
+                        ) 1f else 0f
+                    }
                     .padding(
                         horizontal = 16.dp,
                         vertical = 8.dp
@@ -958,11 +1042,13 @@ fun ChatScreen(
 
                                 } else {
 
-                                    keyboardController
-                                        ?.hide()
+                                    keyboardController?.hide()
 
-                                    showScheduleDialog.value =
-                                        true
+                                    if (scheduledSmsScheduler.canScheduleExactAlarms()) {
+                                        showScheduleDialog.value = true
+                                    } else {
+                                        showExactAlarmExplanation = true
+                                    }
                                 }
                             }
                         ) {
@@ -1118,6 +1204,50 @@ fun ChatScreen(
                         "Enter message and select a future time",
                         Toast.LENGTH_LONG
                     ).show()
+                }
+            }
+        )
+    }
+
+    if (showExactAlarmExplanation) {
+        AlertDialog(
+            onDismissRequest = { showExactAlarmExplanation = false },
+            title = { Text("Allow scheduled messages") },
+            text = {
+                Text(
+                    "To send scheduled messages at the time you choose, allow Message App to set alarms and reminders."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExactAlarmExplanation = false
+                        val settingsIntent = exactAlarmSettingsIntent(context)
+                        if (settingsIntent == null) {
+                            Toast.makeText(
+                                context,
+                                "Unable to open Alarms & reminders settings",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            pendingScheduleRequest = true
+                            try {
+                                exactAlarmSettingsLauncher.launch(settingsIntent)
+                            } catch (exception: Exception) {
+                                pendingScheduleRequest = false
+                                Toast.makeText(
+                                    context,
+                                    "Unable to open Alarms & reminders settings",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                ) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExactAlarmExplanation = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -1375,6 +1505,27 @@ private fun ScheduledSectionHeader() {
     }
 }
 
+private fun exactAlarmSettingsIntent(context: Context): Intent? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+
+    val packageUri = Uri.parse("package:${context.packageName}")
+    val candidates = listOf(
+        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, packageUri),
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri),
+        Intent(Settings.ACTION_SETTINGS)
+    )
+    return candidates.firstOrNull { intent ->
+        intent.resolveActivity(context.packageManager) != null
+    }
+}
+
+private fun LazyListState.isNearBottom(): Boolean {
+    val total = layoutInfo.totalItemsCount
+    if (total == 0) return true
+    val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return true
+    return lastVisible >= total - 3
+}
+
 @Composable
 private fun DateSeparator(
     date: LocalDate
@@ -1462,81 +1613,17 @@ private fun formatDateLabel(
             )
     }
 }
-private fun openContact(
+private suspend fun openContact(
     context: Context,
     phoneNumber: String
 ) {
 
     try {
+        val contactUri = ContactUtils.findContactUri(context, phoneNumber)
 
-        val lookupUri =
-            Uri.withAppendedPath(
-                ContactsContract
-                    .PhoneLookup
-                    .CONTENT_FILTER_URI,
-                Uri.encode(
-                    phoneNumber
-                )
-            )
-
-        val cursor =
-            context.contentResolver.query(
-                lookupUri,
-                arrayOf(
-                    ContactsContract
-                        .PhoneLookup
-                        .CONTACT_ID,
-                    ContactsContract
-                        .PhoneLookup
-                        .LOOKUP_KEY
-                ),
-                null,
-                null,
-                null
-            )
-
-        cursor?.use {
-
-            if (it.moveToFirst()) {
-
-                val contactId =
-                    it.getLong(
-                        it.getColumnIndexOrThrow(
-                            ContactsContract
-                                .PhoneLookup
-                                .CONTACT_ID
-                        )
-                    )
-
-                val lookupKey =
-                    it.getString(
-                        it.getColumnIndexOrThrow(
-                            ContactsContract
-                                .PhoneLookup
-                                .LOOKUP_KEY
-                        )
-                    )
-
-                val contactUri =
-                    ContactsContract
-                        .Contacts
-                        .getLookupUri(
-                            contactId,
-                            lookupKey
-                        )
-
-                val viewContactIntent =
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        contactUri
-                    )
-
-                context.startActivity(
-                    viewContactIntent
-                )
-
-                return
-            }
+        if (contactUri != null) {
+            context.startActivity(Intent(Intent.ACTION_VIEW, contactUri))
+            return
         }
 
         val addContactIntent =
@@ -1565,6 +1652,8 @@ private fun openContact(
             addContactIntent
         )
 
+    } catch (exception: CancellationException) {
+        throw exception
     } catch (
         exception: Exception
     ) {
@@ -1577,4 +1666,5 @@ private fun openContact(
             Toast.LENGTH_SHORT
         ).show()
     }
+
 }

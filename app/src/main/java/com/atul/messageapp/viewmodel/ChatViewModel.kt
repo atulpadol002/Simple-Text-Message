@@ -15,14 +15,16 @@ import com.atul.messageapp.data.model.ScheduledSms
 import com.atul.messageapp.data.preferences.ScheduledSmsPreferences
 import com.atul.messageapp.data.preferences.StarredMessagesPreferences
 import com.atul.messageapp.data.repository.MessageRepository
+import com.atul.messageapp.data.repository.SmsRepository
 import com.atul.messageapp.sms.ScheduledSmsScheduler
 import com.atul.messageapp.sms.SmsDeleter
 import com.atul.messageapp.receiver.SmsEventBus
 import com.atul.messageapp.utils.getContactName
 import com.atul.messageapp.utils.ContactPresentationResolver
+import com.atul.messageapp.data.preferences.BlockedNumbersPreferences
+import com.atul.messageapp.notifications.MessageNotificationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +41,7 @@ class ChatViewModel(
 
     private val repository =
         MessageRepository(appContext)
+    private val smsRepository = SmsRepository(appContext)
 
     private val starredMessagesPreferences =
         StarredMessagesPreferences(
@@ -57,6 +60,7 @@ class ChatViewModel(
 
     private val smsDeleter = SmsDeleter(appContext)
     private val contactPresentationResolver = ContactPresentationResolver(appContext)
+    private val blockedNumbersPreferences = BlockedNumbersPreferences(appContext)
 
     data class ContactAvatarState(
         val conversationId: Long = 0L,
@@ -76,6 +80,10 @@ class ChatViewModel(
 
     val messages: StateFlow<List<Message>> =
         _messages.asStateFlow()
+
+    private val _isInitialMessageLoadComplete = MutableStateFlow(false)
+    val isInitialMessageLoadComplete: StateFlow<Boolean> =
+        _isInitialMessageLoadComplete.asStateFlow()
 
     private val _starredMessageIds =
         MutableStateFlow<Set<Long>>(
@@ -103,6 +111,7 @@ class ChatViewModel(
 
     private var refreshJob:
             Job? = null
+    private var refreshPending = false
     private var avatarJob: Job? = null
 
     private var pendingThreadIdMessageId:
@@ -115,17 +124,6 @@ class ChatViewModel(
                 Looper.getMainLooper()
             )
         ) {
-
-            override fun onChange(
-                selfChange: Boolean
-            ) {
-
-                super.onChange(
-                    selfChange
-                )
-
-                scheduleProviderRefresh()
-            }
 
             override fun onChange(
                 selfChange: Boolean,
@@ -163,6 +161,8 @@ class ChatViewModel(
         initialDisplayName: String
     ) {
 
+        _isInitialMessageLoadComplete.value = false
+
         if (
             conversationId > 0L ||
             currentConversationId == null ||
@@ -182,32 +182,38 @@ class ChatViewModel(
         )
 
         if (conversationId <= 0L) {
+            _messages.value = emptyList()
+            _isInitialMessageLoadComplete.value = true
             return
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            repository.markThreadAsRead(
-                conversationId
-            )
+            if (repository.markThreadAsRead(conversationId)) {
+                SmsEventBus.notifyThreadRead(conversationId)
+                MessageNotificationManager.cancelThread(appContext, conversationId)
+                updateNotificationUnreadCount()
+            }
         }
 
         viewModelScope.launch {
 
-            val result =
-                withContext(
-                    Dispatchers.IO
-                ) {
-
-                    repository.getMessages(
-                        conversationId
-                    )
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    repository.getMessages(conversationId)
                 }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                exception.printStackTrace()
+                emptyList()
+            }
 
             if (
                 currentConversationId ==
                 conversationId
             ) {
                 _messages.value = mergeProviderMessages(result)
+                _isInitialMessageLoadComplete.value = true
             }
         }
     }
@@ -239,9 +245,11 @@ class ChatViewModel(
                     Dispatchers.IO
                 ) {
 
-                    repository.markThreadAsRead(
-                        conversationId
-                    )
+                    if (repository.markThreadAsRead(conversationId)) {
+                        SmsEventBus.notifyThreadRead(conversationId)
+                        MessageNotificationManager.cancelThread(appContext, conversationId)
+                        updateNotificationUnreadCount()
+                    }
 
                     repository.getMessages(
                         conversationId
@@ -748,6 +756,19 @@ class ChatViewModel(
         return changed
     }
 
+    fun blockNumber(phoneNumber: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val blocked = withContext(Dispatchers.IO) { blockedNumbersPreferences.blockNumber(phoneNumber) }
+            if (blocked) SmsEventBus.notifyConversationBlocked(phoneNumber)
+            onResult(blocked)
+        }
+    }
+
+    private suspend fun updateNotificationUnreadCount() {
+        val total = smsRepository.getConversations().sumOf { it.unreadCount }
+        MessageNotificationManager.updateUnreadCount(appContext, total)
+    }
+
     private fun loadContactAvatar(
         conversationId: Long,
         phoneNumber: String,
@@ -1169,18 +1190,16 @@ class ChatViewModel(
     }
 
     private fun scheduleProviderRefresh() {
-
-        refreshJob?.cancel()
-        avatarJob?.cancel()
+        if (refreshJob?.isActive == true) {
+            refreshPending = true
+            return
+        }
 
         refreshJob =
             viewModelScope.launch {
-
-                delay(
-                    250L
-                )
-
-                retryPendingThreadIdResolution()
+                do {
+                    refreshPending = false
+                    retryPendingThreadIdResolution()
 
                 val conversationId =
                     currentConversationId
@@ -1207,7 +1226,7 @@ class ChatViewModel(
                     _messages.value = mergeProviderMessages(refreshedMessages)
                 }
 
-                currentPhoneNumber
+                    currentPhoneNumber
                     ?.let {
                             phoneNumber ->
 
@@ -1215,6 +1234,7 @@ class ChatViewModel(
                             phoneNumber
                         )
                     }
+                } while (refreshPending)
             }
     }
 

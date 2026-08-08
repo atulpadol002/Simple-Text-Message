@@ -39,8 +39,7 @@ class BlockedNumbersPreferences(
         phoneNumber: String
     ): Boolean {
 
-        val cleanedNumber =
-            phoneNumber.trim()
+        val cleanedNumber = normalize(phoneNumber)
 
         if (cleanedNumber.isBlank()) {
             return false
@@ -108,17 +107,12 @@ class BlockedNumbersPreferences(
             .commit()
     }
 
-    private fun normalizePhoneNumber(
+    fun normalize(
         phoneNumber: String
     ): String {
-
-        return phoneNumber.filter {
-                character ->
-
-            character.isDigit()
-        }.takeLast(
-            PHONE_NUMBER_MATCH_LENGTH
-        )
+        val trimmed = phoneNumber.trim()
+        if (trimmed.any(Char::isLetter)) return trimmed.uppercase()
+        return trimmed.filter(Char::isDigit).takeLast(PHONE_NUMBER_MATCH_LENGTH)
     }
 
     private fun matchesBlockedValue(
@@ -126,40 +120,9 @@ class BlockedNumbersPreferences(
         candidateValue: String
     ): Boolean {
 
-        val blockedIsSenderId =
-            blockedValue.any {
-                character ->
-
-                character.isLetter()
-            }
-
-        val candidateIsSenderId =
-            candidateValue.any {
-                character ->
-
-                character.isLetter()
-            }
-
-        return if (
-            blockedIsSenderId ||
-            candidateIsSenderId
-        ) {
-
-            blockedIsSenderId &&
-                    candidateIsSenderId &&
-                    blockedValue.trim().equals(
-                        candidateValue.trim(),
-                        ignoreCase = true
-                    )
-
-        } else {
-
-            normalizePhoneNumber(
-                blockedValue
-            ) == normalizePhoneNumber(
-                candidateValue
-            )
-        }
+        val blocked = normalize(blockedValue)
+        val candidate = normalize(candidateValue)
+        return blocked.isNotBlank() && blocked == candidate
     }
 
     companion object {

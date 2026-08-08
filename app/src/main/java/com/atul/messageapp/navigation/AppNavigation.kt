@@ -5,8 +5,22 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import android.provider.Telephony
+import com.atul.messageapp.MainActivity
+import com.atul.messageapp.PendingChatDestination
+import com.atul.messageapp.sms.DefaultSmsManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,6 +49,23 @@ fun AppNavigation(
     val navController =
         rememberNavController()
 
+    val context = LocalContext.current
+    val activity = context as? MainActivity
+    val pendingDestinationFlow = remember(activity) {
+        activity?.pendingChatDestination ?: MutableStateFlow(null)
+    }
+    val pendingDestination by pendingDestinationFlow.collectAsState()
+    val initialPendingDestination = remember(activity) {
+        activity?.pendingChatDestination?.value
+    }
+    val initialChatRoute = remember(initialPendingDestination, context) {
+        initialPendingDestination
+            ?.takeIf {
+                it.threadId > 0L && DefaultSmsManager(context).isDefaultSmsApp()
+            }
+            ?.toChatRoute()
+    }
+
     val currentRoute =
         navController.currentBackStackEntryAsState()
             .value
@@ -43,9 +74,68 @@ fun AppNavigation(
 
     val navigationInProgress = remember { mutableStateOf(false) }
 
+    LaunchedEffect(pendingDestination, currentRoute) {
+        val destination = pendingDestination ?: return@LaunchedEffect
+        val hostActivity = activity ?: return@LaunchedEffect
+
+        if (
+            initialChatRoute != null &&
+            destination == initialPendingDestination &&
+            currentRoute == Routes.Chat.route
+        ) {
+            hostActivity.consumePendingChat(destination)
+            return@LaunchedEffect
+        }
+
+        if (
+            currentRoute == null ||
+            currentRoute == Routes.Splash.route ||
+            currentRoute == Routes.Permission.route ||
+            !DefaultSmsManager(context).isDefaultSmsApp()
+        ) return@LaunchedEffect
+
+        val resolvedDestination = if (destination.threadId > 0L) {
+            destination
+        } else {
+            val threadId = withContext(Dispatchers.IO) {
+                Telephony.Threads.getOrCreateThreadId(context, destination.address)
+            }
+            destination.copy(threadId = threadId)
+        }
+        if (resolvedDestination.threadId <= 0L) return@LaunchedEffect
+
+        val route = resolvedDestination.toChatRoute()
+        val currentEntry = navController.currentBackStackEntry
+        val alreadyShowingDestination =
+            currentRoute == Routes.Chat.route &&
+                currentEntry?.arguments?.getString("conversationId")?.toLongOrNull() ==
+                resolvedDestination.threadId
+
+        if (!alreadyShowingDestination) {
+            val hasHomeDestination = runCatching {
+                navController.getBackStackEntry(Routes.Home.route)
+            }.isSuccess
+            navController.navigate(route) {
+                launchSingleTop = true
+                if (hasHomeDestination) {
+                    popUpTo(Routes.Home.route) { inclusive = false }
+                } else if (currentRoute == Routes.Chat.route) {
+                    popUpTo(Routes.Chat.route) { inclusive = true }
+                }
+            }
+        }
+        hostActivity.consumePendingChat(destination)
+    }
+
+    LaunchedEffect(currentRoute, pendingDestination) {
+        if (currentRoute == Routes.Home.route && pendingDestination == null) {
+            activity?.requestNotificationPermissionAtAppEntry()
+        }
+    }
+
     NavHost(
         navController = navController,
-        startDestination = Routes.Splash.route,
+        startDestination = initialChatRoute ?: Routes.Splash.route,
         enterTransition = { EnterTransition.None },
         exitTransition = { ExitTransition.None },
         popEnterTransition = { EnterTransition.None },
@@ -178,8 +268,10 @@ fun AppNavigation(
                     navController.popBackStack()
                 }
                 if (!popped) {
-                    navigationInProgress.value = false
-                    backHandled.value = false
+                    navController.navigate(Routes.Home.route) {
+                        popUpTo(Routes.Chat.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             }
 
@@ -298,4 +390,29 @@ fun AppNavigation(
             )
         }
     }
+
+    if (activity?.showNotificationSettingsPrompt == true) {
+        AlertDialog(
+            onDismissRequest = activity::dismissNotificationSettingsPrompt,
+            title = { Text("Enable message notifications") },
+            text = {
+                Text(
+                    "Notification permission is currently disabled. You can enable it in app settings; messaging will continue to work either way."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = activity::openNotificationSettings) {
+                    Text("Open settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = activity::dismissNotificationSettingsPrompt) {
+                    Text("Not now")
+                }
+            }
+        )
+    }
 }
+
+private fun PendingChatDestination.toChatRoute(): String =
+    "chat/$threadId/${Uri.encode(contactName.ifBlank { address })}/${Uri.encode(address)}"

@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.atul.messageapp.data.model.Contact
+import com.atul.messageapp.utils.AvatarColorResolver
 
 @Composable
 fun ContactCard(contact: Contact, onClick: () -> Unit) {
@@ -25,8 +26,9 @@ fun ContactCard(contact: Contact, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val avatarColor = AvatarColorResolver.background(contact.name.ifBlank { contact.phoneNumber }, MaterialTheme.colorScheme)
         Box(
-            Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            Modifier.size(42.dp).clip(CircleShape).background(avatarColor),
             contentAlignment = Alignment.Center
         ) {
             val photo = contact.photo
@@ -36,7 +38,7 @@ fun ContactCard(contact: Contact, onClick: () -> Unit) {
                 Text(
                     contact.name.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString()
                         ?: contact.phoneNumber.firstOrNull { !it.isWhitespace() }?.toString() ?: "?",
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = AvatarColorResolver.foreground(avatarColor, MaterialTheme.colorScheme),
                     fontWeight = FontWeight.SemiBold
                 )
             }

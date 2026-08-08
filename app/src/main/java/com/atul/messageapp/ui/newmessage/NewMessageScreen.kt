@@ -83,7 +83,13 @@ fun NewMessageScreen(
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = androidx.compose.ui.Alignment.Center
-            ) { CircularProgressIndicator() }
+            ) {
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(strokeWidth = 3.dp)
+                    androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
+                    Text("Loading contacts...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
         ContactUiState.Empty -> {
             androidx.compose.foundation.layout.Box(

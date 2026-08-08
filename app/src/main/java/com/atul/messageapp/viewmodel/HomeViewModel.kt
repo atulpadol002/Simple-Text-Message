@@ -16,11 +16,12 @@ import com.atul.messageapp.utils.getContactName
 import com.atul.messageapp.utils.ContactPresentation
 import com.atul.messageapp.utils.ContactPresentationResolver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -32,14 +33,13 @@ class HomeViewModel(
 
     private data class LoadResult(
         val conversations: List<SmsConversation>,
-        val names: Map<String, String>,
         val pinnedIds: Set<Long>,
-        val presentations: Map<String, ContactPresentation>
+        val presentations: Map<Long, ContactPresentation>
     )
 
     private data class CachedHome(
         val conversations: List<SmsConversation>,
-        val names: Map<String, String>
+        val names: Map<Long, String>
     )
 
     private val appContext = application.applicationContext
@@ -82,12 +82,12 @@ class HomeViewModel(
     private val _contactNames =
         MutableStateFlow(cachedHome.names)
 
-    val contactNames: StateFlow<Map<String, String>> =
+    val contactNames: StateFlow<Map<Long, String>> =
         _contactNames.asStateFlow()
     private val _contactPresentations = MutableStateFlow(
         cachedHome.names.mapValues { ContactPresentation(it.value, null) }
     )
-    val contactPresentations: StateFlow<Map<String, ContactPresentation>> = _contactPresentations.asStateFlow()
+    val contactPresentations: StateFlow<Map<Long, ContactPresentation>> = _contactPresentations.asStateFlow()
     private val contactResolver = ContactPresentationResolver(application)
 
     private val _deletingConversationIds =
@@ -110,6 +110,9 @@ class HomeViewModel(
 
     private var reloadPending = false
     private var hasCompletedInitialLoad = cachedHomeRaw != null
+    private var loadGeneration = 0L
+    private var persistGeneration = 0L
+    private val presentationJobs = mutableMapOf<Long, Job>()
 
     private var stateVersion = 0L
     private var scrollAfterReload = false
@@ -126,7 +129,7 @@ class HomeViewModel(
         viewModelScope.launch {
 
             SmsEventBus.events
-                .collectLatest { event ->
+                .collect { event ->
                     if (
                         event == SmsEventBus.Event.ConversationUnblocked ||
                         event == SmsEventBus.Event.ConversationUnarchived ||
@@ -135,7 +138,20 @@ class HomeViewModel(
                         scrollAfterReload = true
                     }
                     when (event) {
-                        SmsEventBus.Event.SmsChanged,
+                        is SmsEventBus.Event.ThreadRead -> {
+                            optimisticallyMarkRead(event.threadId)
+                            loadConversations()
+                        }
+                        is SmsEventBus.Event.ConversationBlocked -> {
+                            val key = blockedNumbersPreferences.normalize(event.address)
+                            stateVersion++
+                            _conversations.value = _conversations.value.filterNot {
+                                blockedNumbersPreferences.normalize(it.address) == key
+                            }
+                            persistVisibleState()
+                            loadConversations()
+                        }
+                        is SmsEventBus.Event.SmsChanged,
                         SmsEventBus.Event.ConversationDeleted,
                         SmsEventBus.Event.ConversationUnblocked,
                         SmsEventBus.Event.ConversationUnarchived,
@@ -145,9 +161,21 @@ class HomeViewModel(
         }
     }
 
+    private fun optimisticallyMarkRead(threadId: Long) {
+        stateVersion++
+        _conversations.value = _conversations.value.map { conversation ->
+            if (conversation.threadId == threadId) conversation.copy(read = true, unreadCount = 0)
+            else conversation
+        }
+        persistVisibleState()
+    }
+
     fun loadConversations() {
 
         applyCachedPresentations()
+        val generation = ++loadGeneration
+        presentationJobs.values.forEach(Job::cancel)
+        presentationJobs.clear()
 
         if (loadJob?.isActive == true) {
             reloadPending = true
@@ -158,7 +186,6 @@ class HomeViewModel(
             _conversations.value.isEmpty() && !hasCompletedInitialLoad
 
         val loadVersion = stateVersion
-
         if (showInitialLoading) {
             _isLoading.value = true
         }
@@ -207,26 +234,33 @@ class HomeViewModel(
                                     .thenByDescending { it.date }
                             )
 
-                        val presentations = conversations
-                            .map { conversation ->
-                                normalizeAddress(conversation.address)
+                        val cachedPresentations = conversations.mapNotNull { conversation ->
+                            contactResolver.getCached(conversation.address)?.let {
+                                conversation.threadId to it
                             }
-                            .distinct()
-                            .associateWith { normalizedAddress ->
-                                val address = conversations
-                                    .first { normalizeAddress(it.address) == normalizedAddress }.address
-                                contactResolver.resolve(address)
-                            }
-                        val names = presentations.mapValues { it.value.displayName }
-                        LoadResult(conversations, names, pinnedIds intersect validThreadIds, presentations)
+                        }.toMap()
+                        LoadResult(
+                            conversations,
+                            pinnedIds intersect validThreadIds,
+                            cachedPresentations
+                        )
                     }
 
-                if (loadVersion == stateVersion) {
+                if (loadVersion == stateVersion && generation == loadGeneration) {
+                    val previousRows = _conversations.value.associateBy { it.threadId }
+                    val preservedPresentations = result.conversations.mapNotNull { conversation ->
+                        val previous = previousRows[conversation.threadId]
+                        _contactPresentations.value[conversation.threadId]
+                            ?.takeIf { previous?.address == conversation.address }
+                            ?.let { conversation.threadId to it }
+                    }.toMap()
+                    val mergedPresentations = preservedPresentations + result.presentations
                     _conversations.value = result.conversations
-                    _contactNames.value = result.names
+                    _contactNames.value = mergedPresentations.mapValues { it.value.displayName }
                     _pinnedThreadIds.value = result.pinnedIds
-                    _contactPresentations.value = result.presentations
+                    _contactPresentations.value = mergedPresentations
                     persistVisibleState()
+                    resolvePresentationMisses(result.conversations, generation)
                     if (scrollAfterReload && !reloadPending) {
                         scrollAfterReload = false
                         _scrollToTopRequestId.value = ++nextScrollRequestId
@@ -235,6 +269,8 @@ class HomeViewModel(
                     reloadPending = true
                 }
 
+            } catch (exception: CancellationException) {
+                throw exception
             } catch (
                 exception: SecurityException
             ) {
@@ -269,6 +305,39 @@ class HomeViewModel(
                 }
             }
         }
+    }
+
+    private fun resolvePresentationMisses(rows: List<SmsConversation>, generation: Long) {
+        rows.filterNot { _contactPresentations.value.containsKey(it.threadId) }
+            .forEach { row ->
+                presentationJobs.remove(row.threadId)?.cancel()
+                presentationJobs[row.threadId] = viewModelScope.launch {
+                    try {
+                        val presentation = withContext(Dispatchers.IO) {
+                            contactResolver.resolve(row.address)
+                        }
+                        val currentRow = _conversations.value.firstOrNull {
+                            it.threadId == row.threadId
+                        }
+                        if (
+                            generation == loadGeneration &&
+                            currentRow?.address == row.address
+                        ) {
+                            _contactPresentations.value =
+                                _contactPresentations.value + (row.threadId to presentation)
+                            _contactNames.value =
+                                _contactNames.value + (row.threadId to presentation.displayName)
+                            persistVisibleState()
+                        }
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } finally {
+                        if (presentationJobs[row.threadId] == coroutineContext[Job]) {
+                            presentationJobs.remove(row.threadId)
+                        }
+                    }
+                }
+            }
     }
 
     fun deleteConversation(
@@ -346,8 +415,7 @@ class HomeViewModel(
 
     private fun applyCachedPresentations() {
         val cached = _conversations.value.mapNotNull { conversation ->
-            val key = normalizeAddress(conversation.address)
-            contactResolver.getCached(conversation.address)?.let { key to it }
+            contactResolver.getCached(conversation.address)?.let { conversation.threadId to it }
         }.toMap()
         if (cached.isEmpty()) return
         _contactPresentations.value = _contactPresentations.value + cached
@@ -363,13 +431,25 @@ class HomeViewModel(
     fun blockSelected() {
         val selected = _selectedThreadIds.value
         if (selected.isEmpty()) return
-        _conversations.value
-            .filter { it.threadId in selected }
-            .forEach { blockedNumbersPreferences.blockNumber(it.address) }
-        stateVersion++
-        _conversations.value = _conversations.value.filterNot { it.threadId in selected }
-        persistVisibleState()
-        clearSelection()
+        val targets = _conversations.value.filter { it.threadId in selected }
+        viewModelScope.launch {
+            val blockedAddresses = withContext(Dispatchers.IO) {
+                targets.mapNotNull { conversation ->
+                    blockedNumbersPreferences.normalize(conversation.address)
+                        .takeIf { blockedNumbersPreferences.blockNumber(conversation.address) }
+                }
+            }
+            if (blockedAddresses.isNotEmpty()) {
+                stateVersion++
+                val keys = blockedAddresses.toSet()
+                _conversations.value = _conversations.value.filterNot {
+                    blockedNumbersPreferences.normalize(it.address) in keys
+                }
+                persistVisibleState()
+                blockedAddresses.forEach(SmsEventBus::notifyConversationBlocked)
+            }
+            clearSelection()
+        }
     }
 
     fun deleteSelected() {
@@ -400,8 +480,7 @@ class HomeViewModel(
         private const val HOME_CACHE_KEY = "visible_home_state"
 
         fun normalizeAddress(address: String): String =
-            PhoneNumberUtils.normalizeNumber(address)
-                .ifBlank { address.trim() }
+            ContactPresentationResolver.cacheKey(address)
 
         private fun readCachedHome(raw: String?): CachedHome {
             if (raw.isNullOrBlank()) return CachedHome(emptyList(), emptyMap())
@@ -424,19 +503,30 @@ class HomeViewModel(
                     }
                 }
                 val namesJson = root.optJSONObject("names") ?: JSONObject()
-                val names = buildMap {
-                    namesJson.keys().forEach { key -> put(key, namesJson.optString(key, key)) }
+                val names = buildMap<Long, String> {
+                    conversations.forEach { conversation ->
+                        val currentKey = cacheNameKey(conversation.threadId, conversation.address)
+                        val legacyKey = PhoneNumberUtils.normalizeNumber(conversation.address)
+                            .ifBlank { conversation.address.trim() }
+                        val value = namesJson.optString(currentKey).takeIf(String::isNotBlank)
+                            ?: namesJson.optString(legacyKey).takeIf(String::isNotBlank)
+                        if (value != null) put(conversation.threadId, value)
+                    }
                 }
                 CachedHome(conversations, names)
             } catch (_: Exception) {
                 CachedHome(emptyList(), emptyMap())
             }
         }
+
+        private fun cacheNameKey(threadId: Long, address: String): String =
+            "thread:$threadId:${ContactPresentationResolver.cacheKey(address)}"
     }
 
     private fun persistVisibleState() {
         val conversations = _conversations.value
         val names = _contactNames.value
+        val generation = ++persistGeneration
         viewModelScope.launch(Dispatchers.IO) {
             val conversationsJson = JSONArray()
             conversations.forEach { conversation ->
@@ -450,11 +540,17 @@ class HomeViewModel(
                 })
             }
             val namesJson = JSONObject()
-            names.forEach { (key, value) -> namesJson.put(key, value) }
-            cachePreferences.edit().putString(
-                HOME_CACHE_KEY,
-                JSONObject().put("conversations", conversationsJson).put("names", namesJson).toString()
-            ).apply()
+            conversations.forEach { conversation ->
+                names[conversation.threadId]?.let { name ->
+                    namesJson.put(cacheNameKey(conversation.threadId, conversation.address), name)
+                }
+            }
+            if (generation == persistGeneration) {
+                cachePreferences.edit().putString(
+                    HOME_CACHE_KEY,
+                    JSONObject().put("conversations", conversationsJson).put("names", namesJson).toString()
+                ).apply()
+            }
         }
     }
 

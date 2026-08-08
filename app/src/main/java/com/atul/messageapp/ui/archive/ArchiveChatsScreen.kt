@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +74,11 @@ fun ArchiveChatsScreen(
                 },
                 actions = {
                     if (selectionMode) {
+                        val visibleIds = conversations.map { it.threadId }.toSet()
+                        val allSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
+                        IconButton(onClick = { viewModel.setVisibleSelection(visibleIds, !allSelected) }) {
+                            Icon(Icons.Default.Check, if (allSelected) "Deselect all" else "Select all")
+                        }
                         IconButton(onClick = viewModel::unarchiveSelected) {
                             Icon(Icons.Default.Unarchive, "Unarchive selected conversations")
                         }

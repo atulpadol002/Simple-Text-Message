@@ -20,6 +20,12 @@ class ScheduledSmsScheduler(
             AlarmManager::class.java
         )
 
+    fun canScheduleExactAlarms(): Boolean {
+        val alarmManager = alarmManager ?: return false
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            alarmManager.canScheduleExactAlarms()
+    }
+
     fun schedule(
         scheduledSms: ScheduledSms
     ): Boolean {
@@ -36,6 +42,10 @@ class ScheduledSmsScheduler(
         val alarmManager =
             alarmManager ?: return false
 
+        if (!canScheduleExactAlarms()) {
+            return false
+        }
+
         val pendingIntent =
             createPendingIntent(
                 scheduledSms = scheduledSms
@@ -43,24 +53,11 @@ class ScheduledSmsScheduler(
 
         return try {
 
-            if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.S &&
-                !alarmManager.canScheduleExactAlarms()
-            ) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    scheduledSms.scheduledTime,
-                    pendingIntent
-                )
-
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    scheduledSms.scheduledTime,
-                    pendingIntent
-                )
-            }
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                scheduledSms.scheduledTime,
+                pendingIntent
+            )
 
             true
 

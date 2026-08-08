@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
@@ -51,6 +52,11 @@ fun StarredMessagesScreen(
                 title = { Text(selectedIds.size.toString()) },
                 navigationIcon = { IconButton(onClick = { selectedIds = emptySet() }) { Icon(Icons.Default.Close, "Close selection") } },
                 actions = {
+                    val visibleIds = messages.map { it.id }.toSet()
+                    val allSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
+                    IconButton(onClick = { selectedIds = if (allSelected) selectedIds - visibleIds else selectedIds + visibleIds }) {
+                        Icon(Icons.Default.Check, if (allSelected) "Deselect all" else "Select all")
+                    }
                     IconButton(onClick = {
                         viewModel.unstar(selectedIds)
                         selectedIds = emptySet()

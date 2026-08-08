@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.atul.messageapp.data.model.SmsConversation
+import com.atul.messageapp.utils.AvatarColorResolver
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -83,11 +84,12 @@ fun ConversationCard(
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val avatarColor = AvatarColorResolver.background(displayName.ifBlank { conversation.address }, MaterialTheme.colorScheme)
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary),
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else avatarColor),
                 contentAlignment = Alignment.Center
             ) {
                 if (selected) {
@@ -102,7 +104,7 @@ fun ConversationCard(
                     } else {
                         Text(
                             text = firstLetter,
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = AvatarColorResolver.foreground(avatarColor, MaterialTheme.colorScheme),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )

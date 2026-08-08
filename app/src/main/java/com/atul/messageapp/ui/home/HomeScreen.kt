@@ -24,8 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PushPin
@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -140,12 +141,9 @@ fun HomeScreen(
     }
 
 
-    val normalizedAddresses = remember(conversations) {
-        conversations.associate { it.threadId to HomeViewModel.normalizeAddress(it.address) }
-    }
-    val displayNames = remember(conversations, contactNames, normalizedAddresses) {
+    val displayNames = remember(conversations, contactNames) {
         conversations.associate { conversation ->
-            conversation.threadId to (contactNames[normalizedAddresses[conversation.threadId]] ?: conversation.address)
+            conversation.threadId to (contactNames[conversation.threadId] ?: conversation.address)
         }
     }
     val contactPhotos = remember(contactPresentations) {
@@ -256,6 +254,11 @@ fun HomeScreen(
                             }
                         },
                         actions = {
+                            val visibleIds = filteredConversations.map { it.threadId }.toSet()
+                            val allVisibleSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
+                            IconButton(onClick = { homeViewModel.setVisibleSelection(visibleIds, !allVisibleSelected) }) {
+                                Icon(Icons.Default.Check, if (allVisibleSelected) "Deselect all" else "Select all")
+                            }
                             IconButton(onClick = homeViewModel::togglePinnedSelection) {
                                 Icon(Icons.Default.PushPin, if (allSelectedPinned) "Unpin" else "Pin")
                             }
@@ -317,7 +320,7 @@ fun HomeScreen(
                                 displayName = displayName,
                                 selected = selected,
                                 isPinned = conversation.threadId in pinnedIds,
-                                contactPhoto = contactPhotos[normalizedAddresses[conversation.threadId]],
+                                contactPhoto = contactPhotos[conversation.threadId],
                                 onClick = {
                                     if (selectionMode) homeViewModel.toggleSelection(conversation.threadId)
                                     else onConversationClick(conversation.threadId, displayName, conversation.address)

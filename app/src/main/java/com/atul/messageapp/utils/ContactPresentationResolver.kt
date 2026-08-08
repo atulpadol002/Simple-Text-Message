@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.ContactsContract
-import android.telephony.PhoneNumberUtils
+import kotlinx.coroutines.CancellationException
 
 data class ContactPresentation(val displayName: String, val photo: Bitmap?)
 
@@ -43,6 +43,8 @@ class ContactPresentationResolver(context: Context) {
                     }
                 }
             }
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (_: Exception) {
             photo = null
         }
@@ -64,7 +66,14 @@ class ContactPresentationResolver(context: Context) {
             ): Boolean = size > MAX_CACHE_ENTRIES
         }
 
-        private fun cacheKey(address: String): String =
-            PhoneNumberUtils.normalizeNumber(address).ifBlank { address.trim() }
+        /**
+         * Keep the exact provider address in the cache identity. A normalized number alone is not
+         * unique: extensions, service numbers and distinct sender IDs can otherwise collide.
+         */
+        fun cacheKey(address: String): String {
+            val trimmed = address.trim()
+            val kind = if (trimmed.any(Char::isLetter)) "sender" else "number"
+            return "$kind:$trimmed"
+        }
     }
 }

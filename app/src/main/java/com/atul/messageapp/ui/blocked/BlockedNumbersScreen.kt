@@ -1,6 +1,8 @@
 package com.atul.messageapp.ui.blocked
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,8 +11,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +26,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.atul.messageapp.viewmodel.BlockedNumbersViewModel
+import com.atul.messageapp.viewmodel.ContactViewModel
+import com.atul.messageapp.viewmodel.ContactUiState
+import com.atul.messageapp.ui.components.ContactCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,19 +39,28 @@ fun BlockedNumbersScreen(
     val blockedNumbers by blockedNumbersViewModel.blockedNumbers.collectAsState()
     val contactNames by blockedNumbersViewModel.contactNames.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
+    var unblockTarget by remember { mutableStateOf<String?>(null) }
+    var showChoice by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
+    var pickerTarget by remember { mutableStateOf<com.atul.messageapp.data.model.Contact?>(null) }
+    val selected by blockedNumbersViewModel.selectedNumbers.collectAsState()
+    val selectionMode = selected.isNotEmpty()
+    BackHandler(enabled = selectionMode) { blockedNumbersViewModel.clearSelection() }
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text("Blocked Numbers") },
+            title = { Text(if (selectionMode) "${selected.size} selected" else "Blocked Numbers") },
             navigationIcon = {
-                IconButton(onClick = onBackClick) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    IconButton(onClick = if (selectionMode) blockedNumbersViewModel::clearSelection else onBackClick) {
+                    Icon(if (selectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack, if (selectionMode) "Close" else "Back")
                 }
             },
             actions = {
-                IconButton(onClick = { showAddDialog = true }) {
-                    Icon(Icons.Default.PersonAdd, "Add blocked number")
-                }
+                if (selectionMode) {
+                    val all = blockedNumbers.isNotEmpty() && blockedNumbers.all { it in selected }
+                    IconButton(onClick = { blockedNumbersViewModel.setVisibleSelection(blockedNumbers.toSet(), !all) }) { Icon(Icons.Default.Check, if (all) "Deselect all" else "Select all") }
+                    TextButton(onClick = { unblockTarget = "__batch__" }) { Text("UNBLOCK", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+                } else IconButton(onClick = { showChoice = true }) { Icon(Icons.Default.PersonAdd, "Add blocked number") }
             }
         )
     }) { padding ->
@@ -68,9 +85,10 @@ fun BlockedNumbersScreen(
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(blockedNumbers, key = { it }) { number ->
-                    BlockedNumberItem(contactNames[number] ?: number, number) {
-                        blockedNumbersViewModel.unblockNumber(number)
-                    }
+                    BlockedNumberItem(contactNames[number] ?: number, number, selected = number in selected,
+                        onClick = { if (selectionMode) blockedNumbersViewModel.toggleSelection(number) else unblockTarget = number },
+                        onLongClick = { blockedNumbersViewModel.toggleSelection(number) }
+                    )
                 }
             }
         }
@@ -88,6 +106,54 @@ fun BlockedNumbersScreen(
             }
         )
     }
+    if (showChoice) AlertDialog(
+        onDismissRequest = { showChoice = false },
+        title = { Text("Block contact") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = { showChoice = false; showPicker = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Icon(Icons.Default.Person, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Choose from contacts",
+                        modifier = Modifier.weight(1f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Start
+                    )
+                }
+                OutlinedButton(
+                    onClick = { showChoice = false; showAddDialog = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Icon(Icons.Default.Dialpad, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Enter number manually",
+                        modifier = Modifier.weight(1f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Start
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { showChoice = false }) { Text("Cancel") } }
+    )
+    if (showPicker) ContactPickerDialog(onDismiss = { showPicker = false }, onContact = { pickerTarget = it })
+    pickerTarget?.let { contact -> AlertDialog(onDismissRequest = { pickerTarget = null }, title = { Text("Block contact?") }, text = { Text("Are you sure you want to block this contact?") },
+        confirmButton = { TextButton(onClick = { pickerTarget = null; showPicker = false; blockedNumbersViewModel.blockNumberAsync(contact.phoneNumber) }) { Text("Block") } }, dismissButton = { TextButton(onClick = { pickerTarget = null }) { Text("Cancel") } }) }
+    unblockTarget?.let { number ->
+        val batch = number == "__batch__"
+        AlertDialog(onDismissRequest = { unblockTarget = null }, title = { Text(if (batch) "Unblock contacts?" else "Unblock contact?") },
+            text = { Text(if (batch) "Are you sure you want to unblock the selected contacts?" else "Are you sure you want to unblock this contact?") },
+            confirmButton = { TextButton(onClick = { unblockTarget = null; if (batch) blockedNumbersViewModel.unblockSelected() else blockedNumbersViewModel.unblockNumber(number) }) { Text("Unblock") } },
+            dismissButton = { TextButton(onClick = { unblockTarget = null }) { Text("Cancel") } })
+    }
 }
 
 @Composable
@@ -100,7 +166,7 @@ private fun AddBlockedNumberDialog(
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Block number or sender") },
+        title = { Text("Block contact") },
         text = {
             OutlinedTextField(
                 value = value,
@@ -130,11 +196,11 @@ private fun AddBlockedNumberDialog(
 }
 
 @Composable
-private fun BlockedNumberItem(contactName: String, phoneNumber: String, onUnblockClick: () -> Unit) {
+private fun BlockedNumberItem(contactName: String, phoneNumber: String, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val savedContact = contactName.isNotBlank() && contactName != phoneNumber
     Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -153,7 +219,28 @@ private fun BlockedNumberItem(contactName: String, phoneNumber: String, onUnbloc
                 if (savedContact) Text(phoneNumber, style = MaterialTheme.typography.bodySmall)
                 Text("Blocked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onUnblockClick) { Icon(Icons.Default.LockOpen, "Unblock number") }
+            if (selected) Icon(Icons.Default.Check, "Selected", tint = MaterialTheme.colorScheme.primary)
+            else Text("UNBLOCK", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
         }
     }
+}
+
+@Composable
+private fun ContactPickerDialog(onDismiss: () -> Unit, onContact: (com.atul.messageapp.data.model.Contact) -> Unit) {
+    val vm: ContactViewModel = viewModel()
+    val state by vm.uiState.collectAsState()
+    var query by remember { mutableStateOf("") }
+    val contacts = (state as? ContactUiState.Content)?.contacts.orEmpty().filter { it.name.contains(query, true) || it.phoneNumber.contains(query, true) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Choose contact") }, text = {
+        Column(Modifier.heightIn(max = 420.dp)) {
+            OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search contacts") })
+            Spacer(Modifier.height(8.dp))
+            when (state) {
+                ContactUiState.InitialLoading -> CircularProgressIndicator()
+                ContactUiState.Empty -> Text("No contacts available")
+                ContactUiState.Error -> Text("Unable to load contacts")
+                is ContactUiState.Content -> LazyColumn { items(contacts, key = { it.phoneNumber }) { contact -> ContactCard(contact) { onContact(contact) } } }
+            }
+        }
+    }, confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }

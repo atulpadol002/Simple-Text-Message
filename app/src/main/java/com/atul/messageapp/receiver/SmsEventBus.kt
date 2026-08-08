@@ -7,29 +7,30 @@ import kotlinx.coroutines.flow.asSharedFlow
 object SmsEventBus {
 
     sealed interface Event {
-        data object SmsChanged : Event
+        data class SmsChanged(val threadId: Long) : Event
+        data class ThreadRead(val threadId: Long) : Event
         data object ConversationDeleted : Event
         data object ConversationUnblocked : Event
+        data class ConversationBlocked(val address: String) : Event
         data object ConversationUnarchived : Event
         data object ConversationRestored : Event
     }
 
     private val _events =
         MutableSharedFlow<Event>(
-            extraBufferCapacity = 1
+            extraBufferCapacity = 32
         )
 
     val events: SharedFlow<Event> =
         _events.asSharedFlow()
 
-    fun notifySmsReceived() {
-
-        _events.tryEmit(Event.SmsChanged)
-    }
+    fun notifySmsReceived(threadId: Long) = emit(Event.SmsChanged(threadId))
+    fun notifyThreadRead(threadId: Long) = emit(Event.ThreadRead(threadId))
 
     fun notifyConversationDeleted() = emit(Event.ConversationDeleted)
 
     fun notifyConversationUnblocked() = emit(Event.ConversationUnblocked)
+    fun notifyConversationBlocked(address: String) = emit(Event.ConversationBlocked(address))
 
     fun notifyConversationUnarchived() = emit(Event.ConversationUnarchived)
 
