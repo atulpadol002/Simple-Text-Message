@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
+import com.ap.messages.utils.isReplyCapableAddress
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -29,7 +30,7 @@ class SmsSender(
     ): Boolean {
 
         if (
-            phoneNumber.isBlank() ||
+            !isReplyCapableAddress(phoneNumber) ||
             message.isBlank()
         ) {
             return false

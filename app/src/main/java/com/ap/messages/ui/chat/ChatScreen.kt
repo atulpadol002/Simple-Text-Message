@@ -119,6 +119,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -132,6 +133,7 @@ import com.ap.messages.data.preferences.BlockedNumbersPreferences
 import com.ap.messages.data.preferences.RecentEmojiPreferences
 import com.ap.messages.ui.components.EmojiPicker
 import com.ap.messages.utils.ContactUtils
+import com.ap.messages.utils.isReplyCapableAddress
 import com.ap.messages.sms.ScheduledSmsScheduler
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
@@ -153,6 +155,10 @@ fun ChatScreen(
 
     val context =
         LocalContext.current
+
+    val isReplyCapable = remember(phoneNumber) {
+        isReplyCapableAddress(phoneNumber)
+    }
 
     val blockedNumbersPreferences =
         remember(context) {
@@ -202,6 +208,16 @@ fun ChatScreen(
     var pendingScheduleRequest by rememberSaveable { mutableStateOf(false) }
     val scheduledSmsScheduler = remember(context) {
         ScheduledSmsScheduler(context)
+    }
+
+    LaunchedEffect(isReplyCapable) {
+        if (!isReplyCapable) {
+            showEmojiPanel = false
+            showScheduleDialog.value = false
+            showExactAlarmExplanation = false
+            pendingScheduleRequest = false
+            keyboardController?.hide()
+        }
     }
     val exactAlarmSettingsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -928,6 +944,7 @@ fun ChatScreen(
                                     failedMessage
                                 )
                             },
+                            retryEnabled = isReplyCapable,
                             onLongClick = {
                                     longPressedMessage:
                                     Message ->
@@ -966,14 +983,15 @@ fun ChatScreen(
                         scheduledSms =
                             scheduledSms,
                         onClick = {
-
-                            selectedScheduledMessage.value =
-                                scheduledSms
+                            if (isReplyCapable) {
+                                selectedScheduledMessage.value = scheduledSms
+                            }
                         }
                     )
                 }
             }
 
+            if (isReplyCapable) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1155,11 +1173,14 @@ fun ChatScreen(
                     }
                 )
             }
+            } else {
+                ReadOnlyReplyFooter()
+            }
         }
     }
 
     if (
-        showScheduleDialog.value
+        isReplyCapable && showScheduleDialog.value
     ) {
 
         ScheduledMessageEditorDialog(
@@ -1224,7 +1245,7 @@ fun ChatScreen(
         )
     }
 
-    if (showExactAlarmExplanation) {
+    if (isReplyCapable && showExactAlarmExplanation) {
         AlertDialog(
             onDismissRequest = { showExactAlarmExplanation = false },
             title = { Text("Allow scheduled messages") },
@@ -1314,6 +1335,7 @@ fun ChatScreen(
     }
 
     selectedScheduledMessage.value
+        ?.takeIf { isReplyCapable }
         ?.let { scheduledSms ->
 
             ScheduledMessageOptionsDialog(
@@ -1390,6 +1412,7 @@ fun ChatScreen(
         }
 
     editingScheduledMessage.value
+        ?.takeIf { isReplyCapable }
         ?.let { scheduledSms ->
 
             ScheduledMessageEditorDialog(
@@ -1466,6 +1489,36 @@ fun ChatScreen(
                 }
             )
             }
+}
+
+@Composable
+private fun ReadOnlyReplyFooter() {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Replies aren’t supported for this sender",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }
 
 private fun meaningfulInitial(displayName: String, phoneNumber: String): String {

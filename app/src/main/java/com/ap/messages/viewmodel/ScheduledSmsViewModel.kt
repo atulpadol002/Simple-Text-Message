@@ -7,6 +7,7 @@ import com.ap.messages.data.model.ScheduledSms
 import com.ap.messages.data.preferences.ScheduledSmsPreferences
 import com.ap.messages.data.repository.MessageRepository
 import com.ap.messages.sms.ScheduledSmsScheduler
+import com.ap.messages.utils.isReplyCapableAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,7 +80,7 @@ class ScheduledSmsViewModel(
             message.trim()
 
         if (
-            cleanPhoneNumber.isBlank() ||
+            !isReplyCapableAddress(cleanPhoneNumber) ||
             cleanMessage.isBlank() ||
             scheduledTime <=
             System.currentTimeMillis()
@@ -215,7 +216,7 @@ class ScheduledSmsViewModel(
             message.trim()
 
         if (
-            cleanPhoneNumber.isBlank() ||
+            !isReplyCapableAddress(cleanPhoneNumber) ||
             cleanMessage.isBlank() ||
             scheduledTime <=
             System.currentTimeMillis()
@@ -317,7 +318,7 @@ class ScheduledSmsViewModel(
     ): Boolean {
 
         if (
-            scheduledSms.phoneNumber.isBlank() ||
+            !isReplyCapableAddress(scheduledSms.phoneNumber) ||
             scheduledSms.message.isBlank()
         ) {
             return false

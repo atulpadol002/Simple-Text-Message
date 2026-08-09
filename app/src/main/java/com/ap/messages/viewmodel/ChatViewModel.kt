@@ -21,6 +21,7 @@ import com.ap.messages.sms.SmsDeleter
 import com.ap.messages.receiver.SmsEventBus
 import com.ap.messages.utils.getContactName
 import com.ap.messages.utils.ContactPresentationResolver
+import com.ap.messages.utils.isReplyCapableAddress
 import com.ap.messages.data.preferences.BlockedNumbersPreferences
 import com.ap.messages.notifications.MessageNotificationManager
 import kotlinx.coroutines.Dispatchers
@@ -294,7 +295,7 @@ class ChatViewModel(
             message.trim()
 
         if (
-            cleanPhoneNumber.isBlank() ||
+            !isReplyCapableAddress(cleanPhoneNumber) ||
             cleanMessage.isBlank() ||
             scheduledTime <=
             System.currentTimeMillis()
@@ -446,6 +447,7 @@ class ChatViewModel(
             message.trim()
 
         if (
+            !isReplyCapableAddress(oldScheduledSms.phoneNumber) ||
             cleanMessage.isBlank() ||
             scheduledTime <=
             System.currentTimeMillis()
@@ -584,7 +586,7 @@ class ChatViewModel(
     ): Boolean {
 
         if (
-            scheduledSms.phoneNumber.isBlank() ||
+            !isReplyCapableAddress(scheduledSms.phoneNumber) ||
             scheduledSms.message.isBlank()
         ) {
             return false
@@ -894,6 +896,8 @@ class ChatViewModel(
         message: String
     ) {
 
+        if (!isReplyCapableAddress(phoneNumber) || message.isBlank()) return
+
         if (
             conversationId > 0L ||
             currentConversationId == null ||
@@ -977,6 +981,8 @@ class ChatViewModel(
     fun retrySend(
         failedMessage: Message
     ) {
+
+        if (!isReplyCapableAddress(failedMessage.phoneNumber)) return
 
         updateMessageStatus(
             messageId =

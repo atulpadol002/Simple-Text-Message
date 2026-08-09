@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import com.ap.messages.data.model.ScheduledSms
 import com.ap.messages.receiver.ScheduledSmsReceiver
+import com.ap.messages.utils.isReplyCapableAddress
 
 class ScheduledSmsScheduler(
     context: Context
@@ -31,7 +32,7 @@ class ScheduledSmsScheduler(
     ): Boolean {
 
         if (
-            scheduledSms.phoneNumber.isBlank() ||
+            !isReplyCapableAddress(scheduledSms.phoneNumber) ||
             scheduledSms.message.isBlank() ||
             scheduledSms.scheduledTime <=
             System.currentTimeMillis()

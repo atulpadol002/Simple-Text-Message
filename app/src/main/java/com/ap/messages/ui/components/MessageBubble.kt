@@ -39,6 +39,7 @@ fun MessageBubble(
     isCurrentSearchMatch: Boolean = false,
     onClick: (Message) -> Unit = {},
     onRetryClick: (Message) -> Unit = {},
+    retryEnabled: Boolean = true,
     onLongClick: (Message) -> Unit = {}
 ) {
 
@@ -243,6 +244,7 @@ fun MessageBubble(
                                     modifier =
                                         Modifier
                                             .combinedClickable(
+                                                enabled = retryEnabled,
                                                 onClick = {
                                                     onRetryClick(
                                                         message
@@ -255,7 +257,7 @@ fun MessageBubble(
                                                 }
                                             ),
                                     text =
-                                        "Failed • Retry",
+                                        if (retryEnabled) "Failed • Retry" else "Failed",
                                     color =
                                         MaterialTheme
                                             .colorScheme

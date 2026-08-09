@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.RestoreFromTrash
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -124,6 +125,8 @@ fun HomeScreen(
     var searchText by remember { mutableStateOf("") }
     var showExitDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showRateUsDialog by remember { mutableStateOf(false) }
+    var selectedRating by remember { mutableStateOf(0) }
     val selectionMode = selectedIds.isNotEmpty()
     val allSelectedPinned = selectionMode && selectedIds.all { it in pinnedIds }
     val canInteract = isActive &&
@@ -240,6 +243,15 @@ fun HomeScreen(
                 DrawerItem("Block Numbers", Icons.Default.Block) { closeDrawer { onDrawerNavigate(Routes.BlockNumbers.route) } }
                 DrawerItem("Starred Messages", Icons.Default.Star) { closeDrawer { onDrawerNavigate(Routes.StarredMessages.route) } }
                 DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) { closeDrawer { onDrawerNavigate(Routes.RecycleBin.route) } }
+                DrawerItem("Rate Us", Icons.Default.RateReview) {
+                    closeDrawer {
+                        if (!RateUsSession.wasDialogShown) {
+                            RateUsSession.markDialogShown()
+                            selectedRating = 0
+                            showRateUsDialog = true
+                        }
+                    }
+                }
             }
         }
     ) {
@@ -375,6 +387,16 @@ fun HomeScreen(
             }) { Text("Delete") }
         },
         dismissButton = { TextButton(enabled = !deleting, onClick = { showDeleteDialog = false }) { Text("Cancel") } }
+    )
+
+    if (showRateUsDialog) RateUsDialog(
+        selectedRating = selectedRating,
+        onRatingSelected = { selectedRating = it },
+        onConfirm = {
+            showRateUsDialog = false
+            launchPlayStoreReview(context)
+        },
+        onDismiss = { showRateUsDialog = false }
     )
 
     if (showExitDialog) AlertDialog(

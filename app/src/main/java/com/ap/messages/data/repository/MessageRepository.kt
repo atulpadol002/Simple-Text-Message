@@ -4,6 +4,7 @@ import android.content.Context
 import com.ap.messages.data.datasource.MessageDataSource
 import com.ap.messages.data.model.Message
 import com.ap.messages.sms.SmsSender
+import com.ap.messages.utils.isReplyCapableAddress
 
 class MessageRepository(
     context: Context
@@ -34,6 +35,8 @@ class MessageRepository(
         body: String
     ): Long {
 
+        if (!isReplyCapableAddress(phoneNumber)) return -1L
+
         return dataSource.insertOutgoingMessage(
             phoneNumber = phoneNumber,
             body = body
@@ -54,6 +57,8 @@ class MessageRepository(
         message: String,
         onSentResult: (Boolean) -> Unit
     ): Boolean {
+
+        if (!isReplyCapableAddress(phoneNumber)) return false
 
         return smsSender.sendSms(
             phoneNumber = phoneNumber,
