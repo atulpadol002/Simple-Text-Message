@@ -1,5 +1,6 @@
 package com.ap.messages.ui.recyclebin
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ap.messages.data.model.DeletedConversation
 import com.ap.messages.viewmodel.RecycleBinViewModel
@@ -50,6 +52,10 @@ import com.ap.messages.utils.AvatarColorResolver
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.ap.messages.ads.AdPlacement
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.AdRuntime
+import com.ap.messages.ads.RewardedAdManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +64,10 @@ fun RecycleBinScreen(
 ) {
     val recycleBinViewModel: RecycleBinViewModel =
         viewModel()
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adsReady by AdRuntime.mobileAdsReady.collectAsState()
 
     val deletedConversations by
     recycleBinViewModel.deletedConversations.collectAsState()
@@ -73,6 +83,26 @@ fun RecycleBinScreen(
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     var dialog by remember { mutableStateOf<String?>(null) }
     val selectionMode = selectedIds.isNotEmpty()
+    androidx.compose.runtime.LaunchedEffect(adConfig, adsReady) {
+        if (activity != null && adsReady) {
+            RewardedAdManager.preload(activity, AdPlacement.REWARDED_RESTORE)
+            RewardedAdManager.preload(activity, AdPlacement.REWARDED_DELETE)
+        }
+    }
+
+    fun performWithReward(placement: AdPlacement, action: () -> Unit) {
+        val host = activity
+        if (host == null) {
+            action()
+            return
+        }
+        RewardedAdManager.showOrFallback(
+            activity = host,
+            placement = placement,
+            onReward = action,
+            onUnavailable = action
+        )
+    }
     BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
 
     Scaffold(
@@ -140,15 +170,16 @@ fun RecycleBinScreen(
                             isProcessing = conversation.recycleBinId in
                                     processingConversationIds,
                             onRestoreClick = {
-                                recycleBinViewModel.restoreConversation(
-                                    conversation.recycleBinId
-                                )
+                                performWithReward(AdPlacement.REWARDED_RESTORE) {
+                                    recycleBinViewModel.restoreConversation(conversation.recycleBinId)
+                                }
                             },
                             onDeleteForeverClick = {
-                                recycleBinViewModel
-                                    .deleteConversationPermanently(
+                                performWithReward(AdPlacement.REWARDED_DELETE) {
+                                    recycleBinViewModel.deleteConversationPermanently(
                                         conversation.recycleBinId
                                     )
+                                }
                             },
                             selected = conversation.recycleBinId in selectedIds,
                             onClick = { if (selectionMode) selectedIds = if (conversation.recycleBinId in selectedIds) selectedIds - conversation.recycleBinId else selectedIds + conversation.recycleBinId },
@@ -159,7 +190,7 @@ fun RecycleBinScreen(
             }
         }
     }
-    dialog?.let { action -> AlertDialog(onDismissRequest = { dialog = null }, title = { Text(if (action == "restore") "Restore conversations?" else "Delete forever?") }, text = { Text(if (action == "restore") "Restore the selected conversations?" else "These conversations cannot be restored after permanent deletion.") }, confirmButton = { Button(onClick = { val ids = selectedIds; dialog = null; selectedIds = emptySet(); if (action == "restore") recycleBinViewModel.restoreSelected(ids) else recycleBinViewModel.deleteSelected(ids) }) { Text(if (action == "restore") "Restore" else "Delete Forever") } }, dismissButton = { Button(onClick = { dialog = null }) { Text("Cancel") } }) }
+    dialog?.let { action -> AlertDialog(onDismissRequest = { dialog = null }, title = { Text(if (action == "restore") "Restore conversations?" else "Delete forever?") }, text = { Text(if (action == "restore") "Restore the selected conversations?" else "These conversations cannot be restored after permanent deletion.") }, confirmButton = { Button(onClick = { val ids = selectedIds; dialog = null; selectedIds = emptySet(); if (action == "restore") performWithReward(AdPlacement.REWARDED_RESTORE) { recycleBinViewModel.restoreSelected(ids) } else performWithReward(AdPlacement.REWARDED_DELETE) { recycleBinViewModel.deleteSelected(ids) } }) { Text(if (action == "restore") "Restore" else "Delete Forever") } }, dismissButton = { Button(onClick = { dialog = null }) { Text("Cancel") } }) }
 }
 
 @Composable

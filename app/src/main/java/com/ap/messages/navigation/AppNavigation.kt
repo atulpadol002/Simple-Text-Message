@@ -11,6 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import android.provider.Telephony
 import com.ap.messages.AppPermissionState
 import com.ap.messages.MainActivity
@@ -26,11 +29,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ap.messages.theme.ThemeMode
+import com.ap.messages.ui.about.AboutScreen
 import com.ap.messages.ui.chat.ChatScreen
 import com.ap.messages.ui.feature.FeatureScreen
 import com.ap.messages.ui.home.HomeScreen
 import com.ap.messages.ui.newmessage.NewMessageScreen
 import com.ap.messages.ui.permission.PermissionScreen
+import com.ap.messages.ui.premium.PaywallScreen
 import com.ap.messages.ui.recyclebin.RecycleBinScreen
 import com.ap.messages.ui.splash.SplashScreen
 import com.ap.messages.ui.theme.ThemeScreen
@@ -38,6 +43,8 @@ import com.ap.messages.ui.archive.ArchiveChatsScreen
 import com.ap.messages.ui.scheduled.ScheduledSmsScreen
 import com.ap.messages.ui.blocked.BlockedNumbersScreen
 import com.ap.messages.ui.starred.StarredMessagesScreen
+import com.ap.messages.ads.InterstitialAdManager
+import com.ap.messages.ads.AutoInterstitialEvent
 
 
 @Composable
@@ -50,6 +57,8 @@ fun AppNavigation(
         rememberNavController()
 
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val activity = context as? MainActivity
     val pendingDestinationFlow = remember(activity) {
         activity?.pendingChatDestination ?: MutableStateFlow(null)
@@ -80,6 +89,25 @@ fun AppNavigation(
             ?.route
 
     val navigationInProgress = remember { mutableStateOf(false) }
+
+    fun runEligibleAdEvent(
+        event: AutoInterstitialEvent,
+        allowNormalInterstitial: Boolean = false,
+        proceed: () -> Unit
+    ) {
+        val hostActivity = activity
+        if (hostActivity == null) {
+            proceed()
+            return
+        }
+        InterstitialAdManager.onEligibleTransition(
+            activity = hostActivity,
+            activitySafe = hostActivity.isAdPresentationSafe(),
+            event = event,
+            allowNormalInterstitial = allowNormalInterstitial,
+            proceed = proceed
+        )
+    }
 
     LaunchedEffect(permissionState.revision, currentRoute) {
         val hostActivity = activity ?: return@LaunchedEffect
@@ -234,8 +262,10 @@ fun AppNavigation(
                 onHomeResumed = { navigationInProgress.value = false },
                 onNewMessageClick = {
                     if (navController.currentDestination?.route == Routes.Home.route) {
-                        navController.navigate(Routes.NewMessage.route) {
-                            launchSingleTop = true
+                        runEligibleAdEvent(AutoInterstitialEvent.IN_APP_TAP) {
+                            navController.navigate(Routes.NewMessage.route) {
+                                launchSingleTop = true
+                            }
                         }
                     }
                 },
@@ -246,20 +276,48 @@ fun AppNavigation(
 
                     if (navController.currentDestination?.route == Routes.Home.route) {
                         navigationInProgress.value = true
-                        navController.navigate(
-                            "chat/$conversationId/" +
-                                    "${Uri.encode(name)}/" +
-                                    Uri.encode(phoneNumber)
-                        )
+                        runEligibleAdEvent(AutoInterstitialEvent.HOME_TAP) {
+                            navController.navigate(
+                                "chat/$conversationId/" +
+                                    "${Uri.encode(name)}/" + Uri.encode(phoneNumber)
+                            )
+                        }
+                    }
+                },
+                onPremiumClick = {
+                    if (navController.currentDestination?.route == Routes.Home.route) {
+                        navigationInProgress.value = true
+                        navController.navigate(Routes.Paywall.route) {
+                            launchSingleTop = true
+                        }
                     }
                 },
                 onDrawerNavigate = { route ->
                     if (navController.currentDestination?.route == Routes.Home.route) {
                         navigationInProgress.value = true
-                        navController.navigate(route)
+                        val navigate = { navController.navigate(route) }
+                        val normalInterstitialRoute = route in setOf(
+                                Routes.ArchiveChats.route,
+                                Routes.StarredMessages.route,
+                                Routes.BlockNumbers.route,
+                                Routes.RecycleBin.route
+                            )
+                        runEligibleAdEvent(
+                            event = AutoInterstitialEvent.IN_APP_TAP,
+                            allowNormalInterstitial = normalInterstitialRoute,
+                            proceed = navigate
+                        )
                     }
                 }
             )
+        }
+
+        composable(Routes.Paywall.route) {
+            PaywallScreen(onBackClick = { navController.popBackStack() })
+        }
+
+        composable(Routes.About.route) {
+            AboutScreen(onBackClick = { navController.popBackStack() })
         }
 
         composable(
@@ -268,25 +326,26 @@ fun AppNavigation(
             val backHandled = androidx.compose.runtime.remember(backStackEntry) {
                 androidx.compose.runtime.mutableStateOf(false)
             }
-            NewMessageScreen(
-                onBackClick = back@{
+            val requestBack = back@{
                     if (backHandled.value || navController.currentDestination?.route != Routes.NewMessage.route) {
                         return@back
                     }
-                    if (navController.previousBackStackEntry?.destination?.route != Routes.Home.route) {
-                        return@back
-                    }
                     backHandled.value = true
-                    if (!navController.popBackStack()) {
-                        backHandled.value = false
+                    runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
+                        if (!navController.popBackStack()) {
+                            backHandled.value = false
+                        }
                     }
-                },
+                }
+            BackHandler(enabled = !backHandled.value && !imeVisible) { requestBack() }
+            NewMessageScreen(
+                onBackClick = requestBack,
                 onContactClick = { name, phone ->
-                    navController.navigate(
-                        "chat/0/" +
-                                "${Uri.encode(name)}/" +
-                                Uri.encode(phone)
-                    )
+                    runEligibleAdEvent(AutoInterstitialEvent.IN_APP_TAP) {
+                        navController.navigate(
+                            "chat/0/" + "${Uri.encode(name)}/" + Uri.encode(phone)
+                        )
+                    }
                 }
             )
         }
@@ -296,7 +355,7 @@ fun AppNavigation(
         ) { backStackEntry ->
 
             val backHandled = remember(backStackEntry) { mutableStateOf(false) }
-            fun leaveChat(popToHome: Boolean) {
+            fun leaveChat(popToHome: Boolean, countBackTap: Boolean) {
                 if (
                     backHandled.value ||
                     navController.currentDestination?.route != Routes.Chat.route
@@ -304,20 +363,22 @@ fun AppNavigation(
 
                 backHandled.value = true
                 navigationInProgress.value = true
-                val popped = if (popToHome) {
-                    navController.popBackStack(Routes.Home.route, inclusive = false)
-                } else {
-                    navController.popBackStack()
-                }
-                if (!popped) {
-                    navController.navigate(Routes.Home.route) {
-                        popUpTo(Routes.Chat.route) { inclusive = true }
-                        launchSingleTop = true
+                val proceed = {
+                    val popped = if (popToHome) {
+                        navController.popBackStack(Routes.Home.route, inclusive = false)
+                    } else {
+                        navController.popBackStack()
+                    }
+                    if (!popped) {
+                        navController.navigate(Routes.Home.route) {
+                            popUpTo(Routes.Chat.route) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 }
+                if (countBackTap) runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP, proceed = proceed)
+                else proceed()
             }
-
-            BackHandler(enabled = !backHandled.value) { leaveChat(popToHome = false) }
 
             val conversationId =
                 backStackEntry.arguments
@@ -341,28 +402,33 @@ fun AppNavigation(
                 contactName = name,
                 phoneNumber = phoneNumber,
                 conversationId = conversationId,
-                onBackClick = { leaveChat(popToHome = false) },
-                onConversationDeleted = { leaveChat(popToHome = true) }
+                onBackClick = { leaveChat(popToHome = false, countBackTap = true) },
+                onConversationDeleted = { leaveChat(popToHome = true, countBackTap = false) }
             )
         }
 
         composable(
             Routes.ArchiveChats.route
         ) {
-            ArchiveChatsScreen(
-                onBackClick = {
+            val goBack = {
+                runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
                     navController.popBackStack()
-                },
+                }
+            }
+            BackHandler(enabled = !imeVisible) { goBack() }
+            ArchiveChatsScreen(
+                onBackClick = goBack,
                 onConversationClick = {
                         conversationId,
                         name,
                         phoneNumber ->
 
-                    navController.navigate(
-                        "chat/$conversationId/" +
-                                "${Uri.encode(name)}/" +
-                                Uri.encode(phoneNumber)
-                    )
+                    runEligibleAdEvent(AutoInterstitialEvent.IN_APP_TAP) {
+                        navController.navigate(
+                            "chat/$conversationId/" +
+                                "${Uri.encode(name)}/" + Uri.encode(phoneNumber)
+                        )
+                    }
                 }
             )
         }
@@ -370,47 +436,64 @@ fun AppNavigation(
         composable(
             Routes.Theme.route
         ) {
+            val goBack = {
+                runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
+                    navController.popBackStack()
+                }
+            }
+            BackHandler(enabled = !imeVisible) { goBack() }
             ThemeScreen(
                 selectedTheme = themeMode,
                 onThemeSelected = onThemeSelected,
-                onBackClick = {
-                    navController.popBackStack()
-                }
+                onBackClick = goBack
             )
         }
 
         composable(
             Routes.ScheduledSms.route
         ) {
-
-            ScheduledSmsScreen(
-                onBackClick = {
+            val goBack = {
+                runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
                     navController.popBackStack()
                 }
+            }
+            BackHandler(enabled = !imeVisible) { goBack() }
+            ScheduledSmsScreen(
+                onBackClick = goBack
             )
         }
 
         composable(
             Routes.BlockNumbers.route
         ) {
-            BlockedNumbersScreen(
-                onBackClick = {
+            val goBack = {
+                runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
                     navController.popBackStack()
                 }
+            }
+            BackHandler(enabled = !imeVisible) { goBack() }
+            BlockedNumbersScreen(
+                onBackClick = goBack
             )
         }
 
         composable(
             Routes.StarredMessages.route
         ) {
-            StarredMessagesScreen(
-                onBackClick = {
+            val goBack = {
+                runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
                     navController.popBackStack()
-                },
+                }
+            }
+            BackHandler(enabled = !imeVisible) { goBack() }
+            StarredMessagesScreen(
+                onBackClick = goBack,
                 onMessageClick = { conversationId, name, phoneNumber ->
-                    navController.navigate(
-                        "chat/$conversationId/${Uri.encode(name)}/${Uri.encode(phoneNumber)}"
-                    )
+                    runEligibleAdEvent(AutoInterstitialEvent.IN_APP_TAP) {
+                        navController.navigate(
+                            "chat/$conversationId/${Uri.encode(name)}/${Uri.encode(phoneNumber)}"
+                        )
+                    }
                 }
             )
         }
@@ -418,17 +501,15 @@ fun AppNavigation(
         composable(
             Routes.RecycleBin.route
         ) {
-            BackHandler {
-                navController.popBackStack(
-                    Routes.Home.route,
-                    inclusive = false
-                )
+            val goBack = {
+                runEligibleAdEvent(AutoInterstitialEvent.BACK_TAP) {
+                    navController.popBackStack(Routes.Home.route, inclusive = false)
+                }
             }
+            BackHandler(enabled = !imeVisible) { goBack() }
 
             RecycleBinScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                }
+                onBackClick = goBack
             )
         }
     }

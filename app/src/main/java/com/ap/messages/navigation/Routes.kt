@@ -10,6 +10,10 @@ sealed class Routes(
 
     object Home : Routes("home")
 
+    object Paywall : Routes("paywall")
+
+    object About : Routes("about")
+
     object NewMessage : Routes("new_message")
 
     object Chat :

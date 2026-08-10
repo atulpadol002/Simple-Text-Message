@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ap.messages.R
 import com.ap.messages.sms.DefaultSmsManager
+import com.ap.messages.ads.AdRuntime
 
 @Composable
 fun PermissionScreen(
@@ -153,6 +154,7 @@ fun PermissionScreen(
                         onPermissionStateChanged()
                     }
                 } else {
+                    AdRuntime.suppressNextAppOpen()
                     defaultSmsManager
                         .createRequestRoleIntent()
                         ?.let(roleLauncher::launch)

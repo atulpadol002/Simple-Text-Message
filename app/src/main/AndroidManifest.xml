@@ -20,6 +20,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MessageApp">
 
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-6067762135425385~5932367963" />
+
         <receiver
             android:name=".receiver.SmsReceiver"
             android:exported="true"

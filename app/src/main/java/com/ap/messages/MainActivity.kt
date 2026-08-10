@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -18,13 +19,23 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.ap.messages.navigation.AppNavigation
+import com.ap.messages.ads.BannerAdHost
 import com.ap.messages.theme.MessageAppTheme
 import com.ap.messages.viewmodel.ThemeViewModel
 import com.ap.messages.notifications.MessageNotificationManager
 import com.ap.messages.sms.DefaultSmsManager
+import com.ap.messages.ads.AdRuntime
+import com.ap.messages.ads.AppOpenAdManager
+import com.ap.messages.ads.AppOpenReason
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.InterstitialAdManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import androidx.lifecycle.Lifecycle
+import com.ap.messages.ads.AdDebug
+import com.ap.messages.ads.AutoInterstitialManager
+import com.ap.messages.premium.PremiumBillingManager
 
 data class PendingChatDestination(
     val threadId: Long,
@@ -45,6 +56,9 @@ data class AppPermissionState(
 }
 
 class MainActivity : ComponentActivity() {
+
+    private var wasBackgrounded = false
+    private var backgroundedAtElapsedRealtime = 0L
 
     private val smsPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -120,6 +134,8 @@ class MainActivity : ComponentActivity() {
         savedInstanceState: Bundle?
     ) {
         super.onCreate(savedInstanceState)
+        PremiumBillingManager.initialize(applicationContext)
+        AdRuntime.initialize(this)
         MessageNotificationManager.createChannel(this)
         captureNavigationIntent(intent)
         refreshPermissionState(forceEmit = true)
@@ -137,14 +153,16 @@ class MainActivity : ComponentActivity() {
             MessageAppTheme(
                 themeMode = themeMode
             ) {
-                AppNavigation(
-                    themeMode = themeMode,
-                    onThemeSelected = { selectedTheme ->
-                        themeViewModel.changeTheme(
-                            selectedTheme
-                        )
-                    }
-                )
+                BannerAdHost {
+                    AppNavigation(
+                        themeMode = themeMode,
+                        onThemeSelected = { selectedTheme ->
+                            themeViewModel.changeTheme(
+                                selectedTheme
+                            )
+                        }
+                    )
+                }
             }
         }
     }
@@ -153,6 +171,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureNavigationIntent(intent)
+        AdRuntime.suppressNextAppOpen()
     }
 
     fun consumePendingChat(destination: PendingChatDestination) {
@@ -169,9 +188,87 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun isAdPresentationSafe(): Boolean =
+        lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            permissionState.value.hasCoreMessagingAccess &&
+            onboardingPermissionStepsComplete(permissionState.value) &&
+            !showSmsSettingsPrompt && !showContactsSettingsPrompt && !showNotificationSettingsPrompt &&
+            pendingChatDestination.value == null
+
     override fun onResume() {
         super.onResume()
+        AutoInterstitialManager.onForeground()
         refreshPermissionState()
+        val returnedFromBackground = wasBackgrounded
+        val backgroundDurationMillis = if (returnedFromBackground) {
+            (SystemClock.elapsedRealtime() - backgroundedAtElapsedRealtime).coerceAtLeast(0L)
+        } else 0L
+        wasBackgrounded = false
+
+        PremiumBillingManager.refreshPurchases {
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@refreshPurchases
+            continueAdResume(returnedFromBackground, backgroundDurationMillis)
+        }
+    }
+
+    private fun continueAdResume(
+        returnedFromBackground: Boolean,
+        backgroundDurationMillis: Long
+    ) {
+        val state = refreshPermissionState()
+        val adSafe = state.hasCoreMessagingAccess &&
+            onboardingPermissionStepsComplete(state) &&
+            !showSmsSettingsPrompt && !showContactsSettingsPrompt && !showNotificationSettingsPrompt &&
+            _pendingChatDestination.value == null
+        AdDebug.log {
+            "Consent launch gate: adSafe=$adSafe defaultSms=${state.isDefaultSmsApp} " +
+                "coreSmsAccess=${state.hasCoreMessagingAccess} onboardingComplete=" +
+                onboardingPermissionStepsComplete(state)
+        }
+        if (adSafe) AdRuntime.gatherConsent(this)
+        else AdDebug.log { "Consent not gathered; MobileAds initialization and ad requests remain blocked" }
+
+        if (adSafe && !onboardingAdOpportunityConsumed) {
+            onboardingAdOpportunityConsumed = true
+            // Clear permission/default-role return suppression at the one-shot onboarding gate.
+            AdRuntime.consumeAppOpenSuppression()
+            val onboardingShown = InterstitialAdManager.onOnboardingCompleted(
+                this,
+                activitySafe = true
+            )
+            if (!onboardingShown) {
+                AppOpenAdManager.maybeShow(
+                    activity = this,
+                    activitySafe = true,
+                    reason = AppOpenReason.AFTER_ONBOARDING
+                )
+            }
+        } else if (returnedFromBackground) {
+            val suppressed = AdRuntime.consumeAppOpenSuppression()
+            val longEnough = backgroundDurationMillis >= MIN_WARM_RESUME_BACKGROUND_MILLIS
+            if (!suppressed && longEnough) {
+                AppOpenAdManager.maybeShow(
+                    activity = this,
+                    activitySafe = adSafe,
+                    reason = AppOpenReason.WARM_RESUME
+                )
+            } else {
+                AdDebug.log {
+                    "App Open reason=warm_resume eligible=false " +
+                        "ready=${AppOpenAdManager.isReady()} shown=false " +
+                        "blockedReason=${if (suppressed) "suppressed_return" else "short_interruption"}"
+                }
+            }
+        }
+    }
+
+    override fun onStop() {
+        AutoInterstitialManager.onBackground()
+        super.onStop()
+        if (!isChangingConfigurations) {
+            wasBackgrounded = true
+            backgroundedAtElapsedRealtime = SystemClock.elapsedRealtime()
+        }
     }
 
     fun refreshPermissionsAfterRoleRequest() {
@@ -194,6 +291,7 @@ class MainActivity : ComponentActivity() {
             if (!contactsPermissionAttemptedForProcess) {
                 contactsPermissionAttemptedForProcess = true
                 activePermissionRequest = PermissionRequest.CONTACTS
+                AdRuntime.suppressNextAppOpen()
                 contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
             }
             return
@@ -207,9 +305,15 @@ class MainActivity : ComponentActivity() {
         ) {
             notificationPermissionAttemptedForProcess = true
             activePermissionRequest = PermissionRequest.NOTIFICATIONS
+            AdRuntime.suppressNextAppOpen()
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+
+    private fun onboardingPermissionStepsComplete(state: AppPermissionState): Boolean =
+        state.hasCoreMessagingAccess && activePermissionRequest == PermissionRequest.NONE &&
+            (state.contactsGranted || contactsStepResolvedForProcess) &&
+            (state.notificationsGranted || notificationStepResolvedForProcess)
 
     fun requestSmsPermissionsFromUser() {
         if (activePermissionRequest != PermissionRequest.NONE) return
@@ -231,6 +335,7 @@ class MainActivity : ComponentActivity() {
 
     fun openSmsSettings() {
         showSmsSettingsPrompt = false
+        AdRuntime.suppressNextAppOpen()
         openApplicationDetailsSettings()
     }
 
@@ -243,6 +348,7 @@ class MainActivity : ComponentActivity() {
     fun openContactsSettings() {
         showContactsSettingsPrompt = false
         contactsStepResolvedForProcess = true
+        AdRuntime.suppressNextAppOpen()
         openApplicationDetailsSettings()
     }
 
@@ -254,6 +360,7 @@ class MainActivity : ComponentActivity() {
     fun openNotificationSettings() {
         showNotificationSettingsPrompt = false
         notificationStepResolvedForProcess = true
+        AdRuntime.suppressNextAppOpen()
         runCatching {
             MessageNotificationManager.openAppNotificationSettings(this)
         }.onFailure {
@@ -264,6 +371,7 @@ class MainActivity : ComponentActivity() {
     private fun launchSmsPermissionRequest(missingPermissions: List<String>) {
         smsPermissionsAttemptedForProcess = true
         activePermissionRequest = PermissionRequest.SMS
+        AdRuntime.suppressNextAppOpen()
         smsPermissionsLauncher.launch(missingPermissions.toTypedArray())
     }
 
@@ -414,6 +522,8 @@ class MainActivity : ComponentActivity() {
         private var lastObservedMissingSmsPermissions: Set<String>? = null
         private var lastObservedContactsGranted: Boolean? = null
         private var lastObservedNotificationsGranted: Boolean? = null
+        private var onboardingAdOpportunityConsumed = false
+        private const val MIN_WARM_RESUME_BACKGROUND_MILLIS = 5_000L
         private const val MAX_HANDLED_NAVIGATION_TOKENS = 64
         private val handledNavigationTokens = linkedSetOf<String>()
     }

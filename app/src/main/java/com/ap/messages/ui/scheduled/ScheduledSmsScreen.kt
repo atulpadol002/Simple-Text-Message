@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +67,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import com.ap.messages.ui.components.ScheduledMessageOptionsDialog
+import com.ap.messages.ads.AdDebug
+import com.ap.messages.ads.AdPlacement
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.AdType
+import com.ap.messages.ads.AdTypePlacement
+import com.ap.messages.ads.BannerAd
+import androidx.compose.runtime.LaunchedEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +100,17 @@ fun ScheduledSmsScreen(
         .scheduledMessages
         .collectAsState()
 
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
+    val scheduledAdType = adTypeConfig[AdTypePlacement.SCHEDULED]
+
+    LaunchedEffect(adConfig.scheduleBanner.enabled, scheduledAdType) {
+        AdDebug.log {
+            "SCHEDULED_BANNER enabled=${adConfig.scheduleBanner.enabled} " +
+                "adType=${scheduledAdType.remoteValue}"
+        }
+    }
+
     val contacts by
     contactViewModel
         .contacts
@@ -103,6 +122,11 @@ fun ScheduledSmsScreen(
 
     var searchText by remember {
         mutableStateOf("")
+    }
+
+    BackHandler(enabled = showContactPicker) {
+        showContactPicker = false
+        searchText = ""
     }
 
     var selectedContact by remember {
@@ -248,6 +272,13 @@ fun ScheduledSmsScreen(
                             "Add scheduled SMS"
                     )
                 }
+            },
+            bottomBar = {
+                BannerAd(
+                    placement = AdPlacement.SCHEDULED_BANNER,
+                    enabled = adConfig.scheduleBanner.enabled &&
+                        scheduledAdType == AdType.BANNER
+                )
             }
         ) { paddingValues ->
 

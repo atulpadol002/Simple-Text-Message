@@ -24,6 +24,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ap.messages.data.model.SmsMessage
 import com.ap.messages.viewmodel.StarredMessagesViewModel
+import com.ap.messages.ads.AdPlacement
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.BannerAd
+import com.ap.messages.ads.AdType
+import com.ap.messages.ads.AdTypePlacement
+import com.ap.messages.ads.NativeAdCard
 import java.text.DateFormat
 import java.util.Date
 
@@ -40,6 +46,8 @@ fun StarredMessagesScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     val selectionMode = selectedIds.isNotEmpty()
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
     BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) viewModel.load() }
@@ -67,6 +75,22 @@ fun StarredMessagesScreen(
             title = { Text("Starred Messages") },
             navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
         )
+    }, bottomBar = {
+        when (adTypeConfig[AdTypePlacement.STARRED]) {
+            AdType.BANNER -> BannerAd(
+                placement = AdPlacement.STARRED_BANNER,
+                enabled = adConfig.starredBanner.enabled,
+                visible = !selectionMode
+            )
+            AdType.NATIVE -> if (!selectionMode) {
+                NativeAdCard(
+                    placement = AdPlacement.STARRED_NATIVE,
+                    enabled = adConfig.starredBanner.enabled,
+                    maxPerSession = adConfig.sessionMaxAds
+                )
+            }
+            else -> Unit
+        }
     }) { padding ->
         when {
             loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {

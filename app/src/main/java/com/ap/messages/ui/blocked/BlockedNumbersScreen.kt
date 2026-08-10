@@ -29,6 +29,12 @@ import com.ap.messages.viewmodel.BlockedNumbersViewModel
 import com.ap.messages.viewmodel.ContactViewModel
 import com.ap.messages.viewmodel.ContactUiState
 import com.ap.messages.ui.components.ContactCard
+import com.ap.messages.ads.AdPlacement
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.BannerAd
+import com.ap.messages.ads.AdType
+import com.ap.messages.ads.AdTypePlacement
+import com.ap.messages.ads.NativeAdCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +51,8 @@ fun BlockedNumbersScreen(
     var pickerTarget by remember { mutableStateOf<com.ap.messages.data.model.Contact?>(null) }
     val selected by blockedNumbersViewModel.selectedNumbers.collectAsState()
     val selectionMode = selected.isNotEmpty()
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
     BackHandler(enabled = selectionMode) { blockedNumbersViewModel.clearSelection() }
 
     Scaffold(topBar = {
@@ -63,6 +71,22 @@ fun BlockedNumbersScreen(
                 } else IconButton(onClick = { showChoice = true }) { Icon(Icons.Default.PersonAdd, "Add blocked number") }
             }
         )
+    }, bottomBar = {
+        when (adTypeConfig[AdTypePlacement.BLOCKED]) {
+            AdType.BANNER -> BannerAd(
+                placement = AdPlacement.BLOCKED_BANNER,
+                enabled = adConfig.blockedBanner.enabled,
+                visible = !selectionMode
+            )
+            AdType.NATIVE -> if (!selectionMode) {
+                NativeAdCard(
+                    placement = AdPlacement.BLOCKED_NATIVE,
+                    enabled = adConfig.blockedBanner.enabled,
+                    maxPerSession = adConfig.sessionMaxAds
+                )
+            }
+            else -> Unit
+        }
     }) { padding ->
         if (blockedNumbers.isEmpty()) {
             Column(

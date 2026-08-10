@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -30,6 +32,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ap.messages.ui.components.ConversationCard
 import com.ap.messages.viewmodel.ArchiveViewModel
+import com.ap.messages.ads.AdPlacement
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.NativeAdCard
+import com.ap.messages.ads.AdType
+import com.ap.messages.ads.AdTypePlacement
+import com.ap.messages.ads.BannerAd
+import com.ap.messages.ads.AdDebug
+import com.ap.messages.ads.AdPosition
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +56,14 @@ fun ArchiveChatsScreen(
     val contactPresentations by viewModel.contactPresentations.collectAsState()
     val hasLoaded by viewModel.hasLoaded.collectAsState()
     val selectionMode = selectedIds.isNotEmpty()
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
+
+    LaunchedEffect(adConfig.archiveNative.position) {
+        AdDebug.log {
+            "archiveNative position=${adConfig.archiveNative.position.remoteValue}"
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -85,6 +103,28 @@ fun ArchiveChatsScreen(
                     }
                 }
             )
+        },
+        bottomBar = {
+            when (adTypeConfig[AdTypePlacement.ARCHIVE]) {
+                AdType.BANNER -> BannerAd(
+                    placement = AdPlacement.ARCHIVE_BANNER,
+                    enabled = adConfig.archiveNative.enabled &&
+                        adConfig.archiveNative.maxPerSession > 0,
+                    visible = !selectionMode
+                )
+                AdType.NATIVE -> if (
+                    !selectionMode && adConfig.archiveNative.enabled &&
+                    adConfig.archiveNative.position == AdPosition.BOTTOM
+                ) {
+                    NativeAdCard(
+                        placement = AdPlacement.ARCHIVE_NATIVE,
+                        enabled = true,
+                        maxPerSession = adConfig.archiveNative.maxPerSession,
+                        modifier = Modifier.navigationBarsPadding()
+                    )
+                }
+                else -> Unit
+            }
         }
     ) { paddingValues ->
         when {
@@ -93,6 +133,19 @@ fun ArchiveChatsScreen(
                 Modifier.fillMaxSize().padding(paddingValues), Alignment.Center
             ) { Text("No archived conversations") }
             else -> LazyColumn(Modifier.fillMaxSize().padding(paddingValues)) {
+                if (
+                    !selectionMode && adConfig.archiveNative.enabled &&
+                    adTypeConfig[AdTypePlacement.ARCHIVE] == AdType.NATIVE &&
+                    adConfig.archiveNative.position == AdPosition.TOP
+                ) {
+                    item(key = "archive_native") {
+                        NativeAdCard(
+                            placement = AdPlacement.ARCHIVE_NATIVE,
+                            enabled = true,
+                            maxPerSession = adConfig.archiveNative.maxPerSession
+                        )
+                    }
+                }
                 items(conversations, key = { it.threadId }) { conversation ->
                     val selected = conversation.threadId in selectedIds
                     ConversationCard(

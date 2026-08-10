@@ -135,6 +135,13 @@ import com.ap.messages.ui.components.EmojiPicker
 import com.ap.messages.utils.ContactUtils
 import com.ap.messages.utils.isReplyCapableAddress
 import com.ap.messages.sms.ScheduledSmsScheduler
+import com.ap.messages.ads.AdRuntime
+import com.ap.messages.ads.AdDebug
+import com.ap.messages.ads.AdPlacement
+import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.AdType
+import com.ap.messages.ads.AdTypePlacement
+import com.ap.messages.ads.NativeAdCard
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.activity.compose.BackHandler
@@ -158,6 +165,25 @@ fun ChatScreen(
 
     val isReplyCapable = remember(phoneNumber) {
         isReplyCapableAddress(phoneNumber)
+    }
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
+    val serviceChatAdType = adTypeConfig[AdTypePlacement.SERVICE_CHAT]
+    var serviceChatNativeShown by remember(conversationId, phoneNumber) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(
+        isReplyCapable,
+        adConfig.serviceChatNative.enabled,
+        serviceChatAdType,
+        serviceChatNativeShown
+    ) {
+        AdDebug.log {
+            "Service Chat readOnly=${!isReplyCapable} " +
+                "serviceChatNative enabled=${adConfig.serviceChatNative.enabled} " +
+                "adType=${serviceChatAdType.remoteValue} shown=$serviceChatNativeShown"
+        }
     }
 
     val blockedNumbersPreferences =
@@ -280,6 +306,11 @@ fun ChatScreen(
     }
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)
+    val transientBackUiVisible = showEmojiPanel || showDeleteMessagesDialog ||
+        selectedMessageIds.isNotEmpty() || isSearchMode
+    BackHandler(enabled = !transientBackUiVisible && imeBottom == 0) {
+        onBackClick()
+    }
     var previousImeBottom by remember(conversationId, phoneNumber) {
         mutableStateOf(imeBottom)
     }
@@ -1174,6 +1205,18 @@ fun ChatScreen(
                 )
             }
             } else {
+                if (
+                    selectedMessageIds.isEmpty() && !isSearchMode &&
+                    adConfig.serviceChatNative.enabled &&
+                    serviceChatAdType == AdType.NATIVE
+                ) {
+                    NativeAdCard(
+                        placement = AdPlacement.SERVICE_CHAT_NATIVE,
+                        enabled = true,
+                        maxPerSession = adConfig.serviceChatNative.maxPerSession,
+                        onShown = { serviceChatNativeShown = true }
+                    )
+                }
                 ReadOnlyReplyFooter()
             }
         }
@@ -1267,6 +1310,7 @@ fun ChatScreen(
                             ).show()
                         } else {
                             pendingScheduleRequest = true
+                            AdRuntime.suppressNextAppOpen()
                             try {
                                 exactAlarmSettingsLauncher.launch(settingsIntent)
                             } catch (exception: Exception) {
