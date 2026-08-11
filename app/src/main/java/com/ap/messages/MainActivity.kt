@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ap.messages.ads.AdDebug
 import com.ap.messages.ads.AutoInterstitialManager
 import com.ap.messages.premium.PremiumBillingManager
@@ -57,8 +58,24 @@ data class AppPermissionState(
 
 class MainActivity : ComponentActivity() {
 
+    private data class PendingAdResume(
+        val returnedFromBackground: Boolean,
+        val backgroundDurationMillis: Long
+    )
+
     private var wasBackgrounded = false
     private var backgroundedAtElapsedRealtime = 0L
+    private var pendingAdResume: PendingAdResume? = null
+    private val pendingAdResumeObserver = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_RESUME) {
+            val pending = pendingAdResume ?: return@LifecycleEventObserver
+            pendingAdResume = null
+            continueAdResume(
+                pending.returnedFromBackground,
+                pending.backgroundDurationMillis
+            )
+        }
+    }
 
     private val smsPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -134,6 +151,7 @@ class MainActivity : ComponentActivity() {
         savedInstanceState: Bundle?
     ) {
         super.onCreate(savedInstanceState)
+        lifecycle.addObserver(pendingAdResumeObserver)
         PremiumBillingManager.initialize(applicationContext)
         AdRuntime.initialize(this)
         MessageNotificationManager.createChannel(this)
@@ -206,8 +224,17 @@ class MainActivity : ComponentActivity() {
         wasBackgrounded = false
 
         PremiumBillingManager.refreshPurchases {
-            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@refreshPurchases
-            continueAdResume(returnedFromBackground, backgroundDurationMillis)
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    continueAdResume(returnedFromBackground, backgroundDurationMillis)
+                } else {
+                    pendingAdResume = PendingAdResume(
+                        returnedFromBackground,
+                        backgroundDurationMillis
+                    )
+                }
+            }
         }
     }
 

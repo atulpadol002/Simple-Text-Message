@@ -328,6 +328,9 @@ fun HomeScreen(
                 DrawerItem("Block Numbers", Icons.Default.Block) { closeDrawer { onDrawerNavigate(Routes.BlockNumbers.route) } }
                 DrawerItem("Starred Messages", Icons.Default.Star) { closeDrawer { onDrawerNavigate(Routes.StarredMessages.route) } }
                 DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) { closeDrawer { onDrawerNavigate(Routes.RecycleBin.route) } }
+                DrawerItem("About", Icons.Default.Info) {
+                    closeDrawer { onDrawerNavigate(Routes.About.route) }
+                }
                 DrawerItem("Rate Us", Icons.Default.RateReview) {
                     closeDrawer {
                         if (!RateUsSession.wasDialogShown) {
@@ -336,18 +339,6 @@ fun HomeScreen(
                             showRateUsDialog = true
                         }
                     }
-                }
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                Text(
-                    text = "ABOUT",
-                    modifier = Modifier.padding(start = 28.dp, top = 18.dp, bottom = 6.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                DrawerItem("About", Icons.Default.Info) {
-                    closeDrawer { onDrawerNavigate(Routes.About.route) }
                 }
                 if (privacyOptionsRequired) {
                     DrawerItem("Privacy options", Icons.Default.PrivacyTip) {
@@ -404,7 +395,7 @@ fun HomeScreen(
                                 Image(
                                     painter = painterResource(R.drawable.premium_topbar_icon),
                                     contentDescription = "Open Premium",
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(40.dp),
                                     contentScale = ContentScale.Fit
                                 )
                             }
@@ -484,7 +475,8 @@ fun HomeScreen(
                                     NativeAdCard(
                                         placement = AdPlacement.HOME_NATIVE,
                                         enabled = true,
-                                        maxPerSession = nativeConfig.maxPerSession
+                                        maxPerSession = nativeConfig.maxPerSession,
+                                        compact = true
                                     )
                                 }
                             }

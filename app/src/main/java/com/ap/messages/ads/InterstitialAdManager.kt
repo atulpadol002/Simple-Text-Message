@@ -11,6 +11,7 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 
 object InterstitialAdManager {
     private var ad: InterstitialAd? = null
+    private var adSource: AdLoadSource? = null
     private var loading = false
 
     fun preload(context: Context) {
@@ -28,18 +29,39 @@ object InterstitialAdManager {
             !AdSessionManager.canShowNonRewarded(config)
         ) return
         loading = true
+        load(context.applicationContext, AdLoadSource.PRIMARY)
+    }
+
+    private fun load(context: Context, source: AdLoadSource) {
+        AdDebug.log { "AdLoad format=INTERSTITIAL source=$source started" }
         InterstitialAd.load(
-            context.applicationContext,
-            AdUnitIds.interstitial,
+            context,
+            AdUnitIds.interstitial(source),
             AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(loaded: InterstitialAd) {
                     loading = false
                     ad = loaded
+                    adSource = source
+                    AdDebug.log { "AdLoad format=INTERSTITIAL source=$source loaded" }
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    loading = false
                     ad = null
+                    adSource = null
+                    AdDebug.log {
+                        "AdLoad format=INTERSTITIAL source=$source failed code=${error.code}"
+                    }
+                    if (
+                        source == AdLoadSource.PRIMARY &&
+                        AdUnitIds.hasDistinctBackup(
+                            AdUnitIds.interstitial,
+                            AdUnitIds.interstitialBackup
+                        )
+                    ) {
+                        load(context, AdLoadSource.BACKUP)
+                    } else {
+                        loading = false
+                    }
                 }
             }
         )
@@ -122,6 +144,7 @@ object InterstitialAdManager {
         }
         AdRuntime.suppressNextAppOpen()
         ad = null
+        adSource = null
         var proceeded = false
         fun continueOnce() {
             if (!proceeded) {
@@ -185,6 +208,7 @@ object InterstitialAdManager {
 
         AdRuntime.suppressNextAppOpen()
         ad = null
+        adSource = null
         var proceeded = false
         var impressionRecorded = false
         fun continueOnce() {
@@ -251,6 +275,7 @@ object InterstitialAdManager {
         }
         AdRuntime.suppressNextAppOpen()
         ad = null
+        adSource = null
         loaded.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
                 AdSessionManager.recordNonRewardedShown(AdPlacement.ONBOARDING_INTERSTITIAL)

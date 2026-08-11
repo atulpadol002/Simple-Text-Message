@@ -3,7 +3,10 @@ package com.ap.messages.ui.scheduled
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +63,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
 import com.ap.messages.data.model.Contact
 import com.ap.messages.data.model.ScheduledSms
+import com.ap.messages.BuildConfig
 import com.ap.messages.viewmodel.ContactViewModel
 import com.ap.messages.viewmodel.ScheduledSmsViewModel
 import java.text.SimpleDateFormat
@@ -72,8 +76,20 @@ import com.ap.messages.ads.AdPlacement
 import com.ap.messages.ads.AdRemoteConfigManager
 import com.ap.messages.ads.AdType
 import com.ap.messages.ads.AdTypePlacement
+import com.ap.messages.ads.AdRuntime
 import com.ap.messages.ads.BannerAd
 import androidx.compose.runtime.LaunchedEffect
+import com.ap.messages.sms.ScheduledSmsScheduler
+import com.ap.messages.ui.components.ExactAlarmPermissionDialog
+import com.ap.messages.ui.components.exactAlarmSettingsIntent
+
+private const val SCHEDULED_SMS_PERMISSION_TAG = "ScheduledSms"
+
+private fun scheduledSmsPermissionLog(message: String) {
+    if (BuildConfig.DEBUG) {
+        Log.d(SCHEDULED_SMS_PERMISSION_TAG, message)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,6 +149,48 @@ fun ScheduledSmsScreen(
         mutableStateOf<Contact?>(null)
     }
 
+    var pendingScheduleContact by remember {
+        mutableStateOf<Contact?>(null)
+    }
+
+    var showExactAlarmExplanation by remember {
+        mutableStateOf(false)
+    }
+
+    var pendingSchedulePermissionRequest by remember {
+        mutableStateOf(false)
+    }
+
+    val scheduledSmsScheduler = remember(context) {
+        ScheduledSmsScheduler(context)
+    }
+
+    fun continuePendingSchedule() {
+        val contact = pendingScheduleContact ?: return
+        pendingScheduleContact = null
+        selectedContact = contact
+        scheduledSmsPermissionLog("ScheduledSms schedule continued=true")
+    }
+
+    fun finishPermissionRequest() {
+        val granted = scheduledSmsScheduler.canScheduleExactAlarms()
+        scheduledSmsPermissionLog("ScheduledSms permission granted=$granted")
+        if (granted) {
+            continuePendingSchedule()
+        } else {
+            pendingScheduleContact = null
+        }
+    }
+
+    val exactAlarmSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (pendingSchedulePermissionRequest) {
+            pendingSchedulePermissionRequest = false
+            finishPermissionRequest()
+        }
+    }
+
     var selectedScheduledSms by remember {
         mutableStateOf<ScheduledSms?>(null)
     }
@@ -175,16 +233,18 @@ fun ScheduledSmsScreen(
                     _,
                     event ->
 
-                if (
-                    event ==
-                    Lifecycle.Event.ON_RESUME
-                ) {
+                if (event == Lifecycle.Event.ON_RESUME) {
 
                     scheduledSmsViewModel
                         .loadScheduledMessages()
 
                     contactViewModel
                         .loadContacts()
+
+                    if (pendingSchedulePermissionRequest) {
+                        pendingSchedulePermissionRequest = false
+                        finishPermissionRequest()
+                    }
                 }
             }
 
@@ -214,14 +274,25 @@ fun ScheduledSmsScreen(
                 searchText = ""
             },
             onContactClick = { contact ->
-
-                selectedContact =
-                    contact
-
                 showContactPicker =
                     false
 
                 searchText = ""
+
+                pendingScheduleContact = contact
+                val permissionRequired =
+                    !scheduledSmsScheduler.canScheduleExactAlarms()
+                scheduledSmsPermissionLog(
+                    "ScheduledSms permission required=$permissionRequired"
+                )
+                if (permissionRequired) {
+                    showExactAlarmExplanation = true
+                } else {
+                    scheduledSmsPermissionLog(
+                        "ScheduledSms permission granted=true"
+                    )
+                    continuePendingSchedule()
+                }
             }
         )
 
@@ -411,6 +482,50 @@ fun ScheduledSmsScreen(
                 }
             }
         }
+    }
+
+    if (showExactAlarmExplanation) {
+        ExactAlarmPermissionDialog(
+            onContinue = {
+                showExactAlarmExplanation = false
+                val settingsIntent = exactAlarmSettingsIntent(context)
+                if (settingsIntent == null) {
+                    scheduledSmsPermissionLog(
+                        "ScheduledSms permission request launched=false"
+                    )
+                    pendingScheduleContact = null
+                    Toast.makeText(
+                        context,
+                        "Unable to open Alarms & reminders settings",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    pendingSchedulePermissionRequest = true
+                    AdRuntime.suppressNextAppOpen()
+                    try {
+                        exactAlarmSettingsLauncher.launch(settingsIntent)
+                        scheduledSmsPermissionLog(
+                            "ScheduledSms permission request launched=true"
+                        )
+                    } catch (exception: Exception) {
+                        pendingSchedulePermissionRequest = false
+                        pendingScheduleContact = null
+                        scheduledSmsPermissionLog(
+                            "ScheduledSms permission request launched=false"
+                        )
+                        Toast.makeText(
+                            context,
+                            "Unable to open Alarms & reminders settings",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            },
+            onCancel = {
+                showExactAlarmExplanation = false
+                pendingScheduleContact = null
+            }
+        )
     }
 
     selectedContact?.let {

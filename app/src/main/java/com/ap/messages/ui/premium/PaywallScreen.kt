@@ -1,6 +1,7 @@
 package com.ap.messages.ui.premium
 
 import android.app.Activity
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
@@ -43,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,26 +111,31 @@ fun PaywallScreen(onBackClick: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             ) {
                 Row(
                     modifier = Modifier.padding(18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Block,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    NoAdsMark(
+                        modifier = Modifier.size(48.dp)
                     )
-                    Text(
-                        text = "NO ADS",
-                        modifier = Modifier.padding(start = 12.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    Column(modifier = Modifier.padding(start = 14.dp)) {
+                        Text(
+                            text = "NO ADS",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Enjoy a clean, distraction-free messaging experience.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -206,6 +213,46 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                     Text("Terms & Conditions")
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun NoAdsMark(modifier: Modifier = Modifier) {
+    val accent = MaterialTheme.colorScheme.error
+    val labelColor = MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = size.minDimension * 0.11f
+            drawCircle(
+                color = accent,
+                style = Stroke(width = strokeWidth)
+            )
+        }
+        Text(
+            text = "ADS",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.ExtraBold,
+            color = labelColor
+        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = size.minDimension * 0.11f
+            drawLine(
+                color = accent,
+                start = androidx.compose.ui.geometry.Offset(
+                    size.width * 0.18f,
+                    size.height * 0.18f
+                ),
+                end = androidx.compose.ui.geometry.Offset(
+                    size.width * 0.82f,
+                    size.height * 0.82f
+                ),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round
+            )
         }
     }
 }

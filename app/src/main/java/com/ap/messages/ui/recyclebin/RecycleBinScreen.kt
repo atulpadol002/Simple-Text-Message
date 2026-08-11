@@ -1,6 +1,8 @@
 package com.ap.messages.ui.recyclebin
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,7 +67,7 @@ fun RecycleBinScreen(
     val recycleBinViewModel: RecycleBinViewModel =
         viewModel()
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = remember(context) { context.findActivity() }
     val adConfig by AdRemoteConfigManager.config.collectAsState()
     val adsReady by AdRuntime.mobileAdsReady.collectAsState()
 
@@ -93,14 +95,15 @@ fun RecycleBinScreen(
     fun performWithReward(placement: AdPlacement, action: () -> Unit) {
         val host = activity
         if (host == null) {
-            action()
+            RewardedAdManager.logActivityUnavailable(placement)
             return
         }
         RewardedAdManager.showOrFallback(
             activity = host,
             placement = placement,
             onReward = action,
-            onUnavailable = action
+            onBypass = action,
+            onUnavailable = {}
         )
     }
     BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
@@ -320,3 +323,9 @@ private fun formatDeletedAt(
 
 private val DELETED_AT_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a")
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}

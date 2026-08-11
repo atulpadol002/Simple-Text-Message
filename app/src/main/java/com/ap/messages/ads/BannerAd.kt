@@ -1,6 +1,7 @@
 package com.ap.messages.ads
 
 import android.content.Context
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -39,54 +40,25 @@ private data class BannerInstanceKey(
 )
 
 private class BannerInstance(
-    context: Context,
+    private val context: Context,
     val key: BannerInstanceKey
 ) {
-    val adView = AdView(context)
+    val view = FrameLayout(context)
     private val impressionRecorded = AtomicBoolean(false)
+    private val bannerSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+        context,
+        key.widthDp
+    )
+    private var adView: AdView? = null
     private var loadState = BannerLoadState.IDLE
+    private var loadSource = AdLoadSource.PRIMARY
     private var visible = false
     private var shownBefore = false
-    private val instanceId = System.identityHashCode(adView)
+    private val instanceId = System.identityHashCode(view)
+    var isLoaded by mutableStateOf(false)
+        private set
 
     init {
-        adView.adUnitId = AdUnitIds.banner
-        val bannerSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
-            context,
-            key.widthDp
-        )
-        adView.setAdSize(bannerSize)
-        adView.adListener = object : AdListener() {
-            override fun onAdLoaded() {
-                if (loadState == BannerLoadState.DESTROYED) return
-                loadState = BannerLoadState.LOADED
-                AdDebug.log {
-                    "Banner onAdLoaded: placement=${key.placement} instance=$instanceId " +
-                        "responseInfo=${adView.responseInfo}"
-                }
-                if (key.placement == AdPlacement.SCHEDULED_BANNER) {
-                    AdDebug.log { "SCHEDULED_BANNER loaded=true" }
-                }
-            }
-
-            override fun onAdFailedToLoad(error: LoadAdError) {
-                if (loadState == BannerLoadState.DESTROYED) return
-                loadState = BannerLoadState.IDLE
-                AdDebug.log {
-                    "Banner onAdFailedToLoad: placement=${key.placement} instance=$instanceId " +
-                        "code=${error.code} domain=${error.domain} message=${error.message} " +
-                        "responseInfo=${error.responseInfo}"
-                }
-            }
-
-            override fun onAdImpression() {
-                if (impressionRecorded.compareAndSet(false, true) &&
-                    AdSessionManager.canShowNonRewarded(AdRemoteConfigManager.config.value)
-                ) {
-                    AdSessionManager.recordNonRewardedShown(key.placement)
-                }
-            }
-        }
         AdDebug.log {
             "Banner instance created: placement=${key.placement} instance=$instanceId " +
                 "adUnitIdType=${if (com.ap.messages.BuildConfig.DEBUG) "TEST" else "PRODUCTION"} " +
@@ -138,27 +110,104 @@ private class BannerInstance(
             }
 
             BannerLoadState.IDLE -> {
-                loadState = BannerLoadState.LOADING
-                val size = adView.adSize
-                AdDebug.log {
-                    "Banner load start: placement=${key.placement} instance=$instanceId " +
-                        "adUnitIdType=${if (com.ap.messages.BuildConfig.DEBUG) "TEST" else "PRODUCTION"} " +
-                        "adSize=${size?.width}x${size?.height}"
-                }
-                adView.loadAd(AdRequest.Builder().build())
+                impressionRecorded.set(false)
+                load(AdLoadSource.PRIMARY)
             }
         }
+    }
+
+    private fun load(source: AdLoadSource) {
+        if (loadState == BannerLoadState.DESTROYED) return
+        loadState = BannerLoadState.LOADING
+        loadSource = source
+        isLoaded = false
+
+        adView?.let { previous ->
+            previous.adListener = object : AdListener() {}
+            view.removeView(previous)
+            previous.destroy()
+        }
+
+        val next = AdView(context).apply {
+            adUnitId = AdUnitIds.banner(source)
+            setAdSize(bannerSize)
+        }
+        adView = next
+        view.addView(next)
+        AdDebug.log { "AdLoad format=BANNER source=$source started" }
+        AdDebug.log {
+            "Banner load start: placement=${key.placement} instance=$instanceId " +
+                "source=$source adSize=${bannerSize.width}x${bannerSize.height}"
+        }
+        next.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                if (loadState == BannerLoadState.DESTROYED || adView !== next || loadSource != source) {
+                    return
+                }
+                loadState = BannerLoadState.LOADED
+                isLoaded = true
+                AdDebug.log { "AdLoad format=BANNER source=$source loaded" }
+                AdDebug.log {
+                    "Banner onAdLoaded: placement=${key.placement} instance=$instanceId " +
+                        "source=$source responseInfo=${next.responseInfo}"
+                }
+                if (key.placement == AdPlacement.SCHEDULED_BANNER) {
+                    AdDebug.log { "SCHEDULED_BANNER loaded=true" }
+                }
+            }
+
+            override fun onAdFailedToLoad(error: LoadAdError) {
+                if (loadState == BannerLoadState.DESTROYED || adView !== next || loadSource != source) {
+                    return
+                }
+                isLoaded = false
+                AdDebug.log {
+                    "AdLoad format=BANNER source=$source failed code=${error.code}"
+                }
+                AdDebug.log {
+                    "Banner onAdFailedToLoad: placement=${key.placement} instance=$instanceId " +
+                        "source=$source code=${error.code} domain=${error.domain} " +
+                        "responseInfo=${error.responseInfo}"
+                }
+                if (
+                    source == AdLoadSource.PRIMARY &&
+                    AdUnitIds.hasDistinctBackup(AdUnitIds.banner, AdUnitIds.bannerBackup)
+                ) {
+                    load(AdLoadSource.BACKUP)
+                } else {
+                    loadState = BannerLoadState.IDLE
+                    next.adListener = object : AdListener() {}
+                    view.removeView(next)
+                    next.destroy()
+                    if (adView === next) adView = null
+                }
+            }
+
+            override fun onAdImpression() {
+                if (impressionRecorded.compareAndSet(false, true) &&
+                    AdSessionManager.canShowNonRewarded(AdRemoteConfigManager.config.value)
+                ) {
+                    AdSessionManager.recordNonRewardedShown(key.placement)
+                }
+            }
+        }
+        next.loadAd(AdRequest.Builder().build())
     }
 
     fun destroy(reason: String) {
         if (loadState == BannerLoadState.DESTROYED) return
         visible = false
+        isLoaded = false
         loadState = BannerLoadState.DESTROYED
         AdDebug.log {
             "Banner destroyed: placement=${key.placement} instance=$instanceId reason=$reason"
         }
-        adView.adListener = object : AdListener() {}
-        adView.destroy()
+        adView?.let { current ->
+            current.adListener = object : AdListener() {}
+            view.removeView(current)
+            current.destroy()
+        }
+        adView = null
     }
 }
 
@@ -267,12 +316,12 @@ fun BannerAd(
     }
 
     val instance = lease.instance
-    if (shouldShow && instance != null) {
+    if (shouldShow && instance != null && instance.isLoaded) {
         Box(
             modifier = modifier.fillMaxWidth().navigationBarsPadding(),
             contentAlignment = Alignment.Center
         ) {
-            AndroidView(factory = { instance.adView })
+            AndroidView(factory = { instance.view })
         }
     }
 }

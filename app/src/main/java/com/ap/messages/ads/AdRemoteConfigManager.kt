@@ -131,7 +131,9 @@ object AdRemoteConfigManager {
         _autoInterstitialConfig.value = parsedAutoInterstitial ?: AutoInterstitialConfig.Off
         _adTypeConfig.value = parsedAdTypes
         AutoInterstitialManager.onConfigUpdated(_autoInterstitialConfig.value)
-        appContext?.let(AdRuntime::preloadConfiguredAds)
+        appContext?.let { context ->
+            AdRuntime.preloadConfiguredAds(context, "remote_config_activated")
+        }
         logEffectiveConfig()
     }
 

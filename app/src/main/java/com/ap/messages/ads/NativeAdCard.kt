@@ -1,6 +1,7 @@
 package com.ap.messages.ads
 
 import android.graphics.Color
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -41,7 +42,8 @@ fun NativeAdCard(
     enabled: Boolean,
     maxPerSession: Int,
     modifier: Modifier = Modifier,
-    onShown: () -> Unit = {}
+    compact: Boolean = false,
+    onLoaded: () -> Unit = {}
 ) {
     val config by AdRemoteConfigManager.config.collectAsState()
     val adsReady by AdRuntime.mobileAdsReady.collectAsState()
@@ -54,37 +56,54 @@ fun NativeAdCard(
     ) return
 
     val context = LocalContext.current
-    val currentOnShown by rememberUpdatedState(onShown)
+    val currentOnLoaded by rememberUpdatedState(onLoaded)
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
     val impressionRecorded = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
     LaunchedEffect(placement) {
-        AdLoader.Builder(context, AdUnitIds.native)
-            .forNativeAd { loaded ->
-                if (disposed.get()) {
-                    loaded.destroy()
-                } else {
-                    nativeAd?.destroy()
-                    nativeAd = loaded
-                    currentOnShown()
-                }
-            }
-            .withAdListener(object : AdListener() {
-                override fun onAdImpression() {
-                    if (impressionRecorded.compareAndSet(false, true) &&
-                        AdSessionManager.canShowNonRewarded(AdRemoteConfigManager.config.value)
-                    ) {
-                        AdSessionManager.recordNonRewardedShown(placement)
+        fun load(source: AdLoadSource) {
+            val unitId = AdUnitIds.native(source)
+            AdDebug.log { "AdLoad format=NATIVE source=$source started" }
+            AdLoader.Builder(context, unitId)
+                .forNativeAd { loaded ->
+                    if (disposed.get()) {
+                        loaded.destroy()
+                    } else {
+                        nativeAd?.destroy()
+                        nativeAd = loaded
+                        AdDebug.log { "AdLoad format=NATIVE source=$source loaded" }
+                        currentOnLoaded()
                     }
                 }
+                .withAdListener(object : AdListener() {
+                    override fun onAdImpression() {
+                        if (impressionRecorded.compareAndSet(false, true) &&
+                            AdSessionManager.canShowNonRewarded(AdRemoteConfigManager.config.value)
+                        ) {
+                            AdSessionManager.recordNonRewardedShown(placement)
+                        }
+                    }
 
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    nativeAd = null
-                }
-            })
-            .build()
-            .loadAd(AdRequest.Builder().build())
+                    override fun onAdFailedToLoad(error: LoadAdError) {
+                        nativeAd = null
+                        AdDebug.log {
+                            "AdLoad format=NATIVE source=$source failed code=${error.code}"
+                        }
+                        if (
+                            source == AdLoadSource.PRIMARY &&
+                            !disposed.get() &&
+                            AdUnitIds.hasDistinctBackup(AdUnitIds.native, AdUnitIds.nativeBackup)
+                        ) {
+                            load(AdLoadSource.BACKUP)
+                        }
+                    }
+                })
+                .build()
+                .loadAd(AdRequest.Builder().build())
+        }
+
+        load(AdLoadSource.PRIMARY)
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -98,19 +117,139 @@ fun NativeAdCard(
     val onSurface = MaterialTheme.colorScheme.onSurface.toArgb()
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        modifier = modifier.fillMaxWidth().padding(
+            horizontal = 12.dp,
+            vertical = if (compact) 4.dp else 6.dp
+        ),
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 1.dp
     ) {
         AndroidView(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            factory = { buildNativeAdView(it, ad, onSurface, onSurfaceVariant) },
+            modifier = Modifier.fillMaxWidth().padding(if (compact) 6.dp else 10.dp),
+            factory = {
+                if (compact) {
+                    buildCompactNativeAdView(it, ad, onSurface, onSurfaceVariant)
+                } else {
+                    buildNativeAdView(it, ad, onSurface, onSurfaceVariant)
+                }
+            },
             update = { view -> view.setNativeAd(ad) },
             onRelease = { it.destroy() }
         )
     }
 }
+
+private fun buildCompactNativeAdView(
+    context: android.content.Context,
+    ad: NativeAd,
+    onSurface: Int,
+    onSurfaceVariant: Int
+): NativeAdView {
+    val nativeView = NativeAdView(context)
+    val root = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(context.dp(8), context.dp(4), context.dp(8), context.dp(4))
+        setBackgroundColor(Color.TRANSPARENT)
+    }
+    val attribution = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    attribution.addView(TextView(context).apply {
+        text = "Ad"
+        textSize = 11f
+        setTextColor(onSurfaceVariant)
+    }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+    val adChoices = AdChoicesView(context)
+    attribution.addView(adChoices)
+    root.addView(attribution)
+
+    val content = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    val icon = ImageView(context).apply {
+        ad.icon?.drawable?.let(::setImageDrawable)
+        visibility = if (ad.icon == null) View.GONE else View.VISIBLE
+        scaleType = ImageView.ScaleType.CENTER_CROP
+    }
+    content.addView(
+        icon,
+        LinearLayout.LayoutParams(context.dp(42), context.dp(42)).apply {
+            marginEnd = context.dp(10)
+        }
+    )
+
+    val textColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    val headline = TextView(context).apply {
+        text = ad.headline
+        textSize = 15f
+        setTextColor(onSurface)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
+    textColumn.addView(headline)
+
+    val supportingText = ad.advertiser?.takeIf { it.isNotBlank() }
+        ?: ad.body?.takeIf { it.isNotBlank() }
+    val supporting = TextView(context).apply {
+        text = supportingText.orEmpty()
+        textSize = 12f
+        setTextColor(onSurfaceVariant)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        visibility = if (supportingText == null) View.GONE else View.VISIBLE
+    }
+    textColumn.addView(supporting)
+    content.addView(
+        textColumn,
+        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+    )
+
+    val action = Button(context).apply {
+        text = ad.callToAction.orEmpty()
+        textSize = 12f
+        isAllCaps = false
+        minWidth = 0
+        minimumWidth = 0
+        minHeight = context.dp(40)
+        minimumHeight = context.dp(40)
+        setPadding(context.dp(10), 0, context.dp(10), 0)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        visibility = if (ad.callToAction.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+    content.addView(
+        action,
+        LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            marginStart = context.dp(8)
+        }
+    )
+    root.addView(content)
+
+    nativeView.addView(root)
+    nativeView.adChoicesView = adChoices
+    nativeView.headlineView = headline
+    nativeView.iconView = icon
+    nativeView.callToActionView = action
+    if (!ad.advertiser.isNullOrBlank()) {
+        nativeView.advertiserView = supporting
+    } else {
+        nativeView.bodyView = supporting
+    }
+    nativeView.setNativeAd(ad)
+    return nativeView
+}
+
+private fun android.content.Context.dp(value: Int): Int =
+    (value * resources.displayMetrics.density).toInt()
 
 private fun buildNativeAdView(
     context: android.content.Context,

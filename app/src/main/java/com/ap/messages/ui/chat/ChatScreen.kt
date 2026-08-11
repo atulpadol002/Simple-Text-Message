@@ -8,9 +8,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -68,6 +65,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,6 +100,8 @@ import com.ap.messages.ui.components.MessageBubble
 import com.ap.messages.ui.components.ScheduledMessageBubble
 import com.ap.messages.ui.components.ScheduledMessageEditorDialog
 import com.ap.messages.ui.components.ScheduledMessageOptionsDialog
+import com.ap.messages.ui.components.ExactAlarmPermissionDialog
+import com.ap.messages.ui.components.exactAlarmSettingsIntent
 import com.ap.messages.viewmodel.ChatViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.collect
@@ -163,27 +163,15 @@ fun ChatScreen(
     val context =
         LocalContext.current
 
-    val isReplyCapable = remember(phoneNumber) {
-        isReplyCapableAddress(phoneNumber)
+    val isReadOnlyAddress = remember(phoneNumber) {
+        !isReplyCapableAddress(phoneNumber)
     }
+    val isReplyCapable = !isReadOnlyAddress
     val adConfig by AdRemoteConfigManager.config.collectAsState()
     val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
     val serviceChatAdType = adTypeConfig[AdTypePlacement.SERVICE_CHAT]
-    var serviceChatNativeShown by remember(conversationId, phoneNumber) {
+    var serviceChatNativeLoaded by remember(conversationId, phoneNumber) {
         mutableStateOf(false)
-    }
-
-    LaunchedEffect(
-        isReplyCapable,
-        adConfig.serviceChatNative.enabled,
-        serviceChatAdType,
-        serviceChatNativeShown
-    ) {
-        AdDebug.log {
-            "Service Chat readOnly=${!isReplyCapable} " +
-                "serviceChatNative enabled=${adConfig.serviceChatNative.enabled} " +
-                "adType=${serviceChatAdType.remoteValue} shown=$serviceChatNativeShown"
-        }
     }
 
     val blockedNumbersPreferences =
@@ -263,6 +251,29 @@ fun ChatScreen(
     var searchScrollJob by remember { mutableStateOf<Job?>(null) }
     var showDeleteMessagesDialog by remember { mutableStateOf(false) }
     var isDeletingMessages by remember { mutableStateOf(false) }
+    val showServiceChatNative =
+        isReadOnlyAddress && selectedMessageIds.isEmpty() && !isSearchMode &&
+            adConfig.serviceChatNative.enabled &&
+            serviceChatAdType == AdType.NATIVE
+
+    LaunchedEffect(showServiceChatNative) {
+        if (!showServiceChatNative) serviceChatNativeLoaded = false
+    }
+
+    LaunchedEffect(
+        isReadOnlyAddress,
+        adConfig.serviceChatNative.enabled,
+        serviceChatAdType,
+        showServiceChatNative,
+        serviceChatNativeLoaded
+    ) {
+        AdDebug.log {
+            "Service Chat readOnly=$isReadOnlyAddress " +
+                "serviceChatNative enabled=${adConfig.serviceChatNative.enabled} " +
+                "adType=${serviceChatAdType.remoteValue} " +
+                "itemInserted=$showServiceChatNative nativeLoaded=$serviceChatNativeLoaded"
+        }
+    }
     val contactAvatar by chatViewModel.contactAvatar.collectAsState()
     val routeContactAvatar = contactAvatar.takeIf {
         it.conversationId == conversationId && it.phoneNumber == phoneNumber
@@ -473,7 +484,10 @@ fun ChatScreen(
     val totalItems =
         messages.size +
             scheduledMessages.size +
-            if (scheduledMessages.isNotEmpty()) 1 else 0
+            (if (scheduledMessages.isNotEmpty()) 1 else 0) +
+            (if (showServiceChatNative) 1 else 0) +
+            (if (isReadOnlyAddress) 1 else 0)
+    val bottomItemIndex = totalItems - 1
 
     LaunchedEffect(
         totalItems,
@@ -489,7 +503,7 @@ fun ChatScreen(
         }
 
         if (!initialPositioningComplete) {
-            listState.scrollToItem(totalItems - 1)
+            listState.scrollToItem(bottomItemIndex)
             initialPositioningComplete = true
             followLatestMessage = true
         } else if (
@@ -497,7 +511,7 @@ fun ChatScreen(
             followLatestMessage &&
             !isSearchMode
         ) {
-            listState.animateScrollToItem(totalItems - 1)
+            listState.animateScrollToItem(bottomItemIndex)
         }
         previousTotalItems = totalItems
     }
@@ -518,9 +532,28 @@ fun ChatScreen(
             followLatestMessage &&
             !isSearchMode
         ) {
-            listState.scrollToItem(totalItems - 1)
+            listState.scrollToItem(bottomItemIndex)
         }
         previousImeBottom = imeBottom
+    }
+
+    LaunchedEffect(
+        serviceChatNativeLoaded,
+        bottomItemIndex,
+        initialPositioningComplete,
+        followLatestMessage,
+        isSearchMode
+    ) {
+        if (
+            serviceChatNativeLoaded &&
+            bottomItemIndex >= 0 &&
+            initialPositioningComplete &&
+            followLatestMessage &&
+            !isSearchMode
+        ) {
+            withFrameNanos { }
+            listState.scrollToItem(bottomItemIndex)
+        }
     }
 
     Scaffold(
@@ -1020,6 +1053,24 @@ fun ChatScreen(
                         }
                     )
                 }
+
+                if (showServiceChatNative) {
+                    item(key = "service_chat_native") {
+                        NativeAdCard(
+                            placement = AdPlacement.SERVICE_CHAT_NATIVE,
+                            enabled = true,
+                            maxPerSession = adConfig.serviceChatNative.maxPerSession,
+                            compact = true,
+                            onLoaded = { serviceChatNativeLoaded = true }
+                        )
+                    }
+                }
+
+                if (isReadOnlyAddress) {
+                    item(key = "read_only_footer") {
+                        ReadOnlyReplyFooter()
+                    }
+                }
             }
 
             if (isReplyCapable) {
@@ -1204,20 +1255,6 @@ fun ChatScreen(
                     }
                 )
             }
-            } else {
-                if (
-                    selectedMessageIds.isEmpty() && !isSearchMode &&
-                    adConfig.serviceChatNative.enabled &&
-                    serviceChatAdType == AdType.NATIVE
-                ) {
-                    NativeAdCard(
-                        placement = AdPlacement.SERVICE_CHAT_NATIVE,
-                        enabled = true,
-                        maxPerSession = adConfig.serviceChatNative.maxPerSession,
-                        onShown = { serviceChatNativeShown = true }
-                    )
-                }
-                ReadOnlyReplyFooter()
             }
         }
     }
@@ -1289,47 +1326,32 @@ fun ChatScreen(
     }
 
     if (isReplyCapable && showExactAlarmExplanation) {
-        AlertDialog(
-            onDismissRequest = { showExactAlarmExplanation = false },
-            title = { Text("Allow scheduled messages") },
-            text = {
-                Text(
-                    "To send scheduled messages at the time you choose, allow Message App to set alarms and reminders."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showExactAlarmExplanation = false
-                        val settingsIntent = exactAlarmSettingsIntent(context)
-                        if (settingsIntent == null) {
-                            Toast.makeText(
-                                context,
-                                "Unable to open Alarms & reminders settings",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } else {
-                            pendingScheduleRequest = true
-                            AdRuntime.suppressNextAppOpen()
-                            try {
-                                exactAlarmSettingsLauncher.launch(settingsIntent)
-                            } catch (exception: Exception) {
-                                pendingScheduleRequest = false
-                                Toast.makeText(
-                                    context,
-                                    "Unable to open Alarms & reminders settings",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
+        ExactAlarmPermissionDialog(
+            onContinue = {
+                showExactAlarmExplanation = false
+                val settingsIntent = exactAlarmSettingsIntent(context)
+                if (settingsIntent == null) {
+                    Toast.makeText(
+                        context,
+                        "Unable to open Alarms & reminders settings",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    pendingScheduleRequest = true
+                    AdRuntime.suppressNextAppOpen()
+                    try {
+                        exactAlarmSettingsLauncher.launch(settingsIntent)
+                    } catch (exception: Exception) {
+                        pendingScheduleRequest = false
+                        Toast.makeText(
+                            context,
+                            "Unable to open Alarms & reminders settings",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
-                ) { Text("Continue") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExactAlarmExplanation = false }) {
-                    Text("Cancel")
                 }
-            }
+            },
+            onCancel = { showExactAlarmExplanation = false }
         )
     }
 
@@ -1614,20 +1636,6 @@ private fun ScheduledSectionHeader() {
             modifier =
                 Modifier.weight(1f)
         )
-    }
-}
-
-private fun exactAlarmSettingsIntent(context: Context): Intent? {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-
-    val packageUri = Uri.parse("package:${context.packageName}")
-    val candidates = listOf(
-        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, packageUri),
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri),
-        Intent(Settings.ACTION_SETTINGS)
-    )
-    return candidates.firstOrNull { intent ->
-        intent.resolveActivity(context.packageManager) != null
     }
 }
 
