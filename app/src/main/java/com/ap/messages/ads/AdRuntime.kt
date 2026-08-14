@@ -29,9 +29,13 @@ object AdRuntime {
         AdRemoteConfigManager.fetch(activity.applicationContext)
     }
 
-    fun gatherConsent(activity: Activity) {
+    fun gatherConsent(
+        activity: Activity,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
         if (!areAdsAllowed()) {
             AdDebug.log { "Consent and ads skipped: premium entitlement is active or checking" }
+            onComplete(false)
             return
         }
         AdConsentManager.gatherConsent(activity) { allowed ->
@@ -41,6 +45,7 @@ object AdRuntime {
             } else {
                 AdDebug.log { "MobileAds.initialize not called: canRequestAds=false" }
             }
+            onComplete(allowed)
         }
     }
 
@@ -71,6 +76,19 @@ object AdRuntime {
         AppOpenAdManager.preload(context, trigger)
         RewardedAdManager.preload(context, AdPlacement.REWARDED_RESTORE)
         RewardedAdManager.preload(context, AdPlacement.REWARDED_DELETE)
+    }
+
+    internal fun onConsentStateChanged(context: Context) {
+        if (!AdConsentManager.canRequestAds.value) {
+            AdDebug.log { "PrivacyOptions adRuntime=blocked_canRequestAds_false" }
+            return
+        }
+        if (!areAdsAllowed()) {
+            AdDebug.log { "PrivacyOptions adRuntime=blocked_premium_ads_suppressed" }
+            return
+        }
+        initializeMobileAds(context)
+        preloadConfiguredAds(context, "privacy_options_updated")
     }
 
     @Synchronized
@@ -110,6 +128,24 @@ object AdRuntime {
 
     fun canLoadAds(): Boolean =
         areAdsAllowed() && AdConsentManager.canRequestAds.value && _mobileAdsReady.value
+
+    fun canLoadAds(format: String, source: AdLoadSource): Boolean {
+        val consent = AdConsentManager.canRequestAds.value
+        val allowed = areAdsAllowed() && consent && _mobileAdsReady.value
+        when {
+            !consent -> AdDebug.log {
+                "Ads blocked because canRequestAds=false format=$format source=$source"
+            }
+            allowed -> AdDebug.log {
+                "Ads allowed after canRequestAds=true format=$format source=$source"
+            }
+            else -> AdDebug.log {
+                "Ads blocked despite canRequestAds=true format=$format source=$source " +
+                    "adsAllowed=${areAdsAllowed()} sdkReady=${_mobileAdsReady.value}"
+            }
+        }
+        return allowed
+    }
 
     fun areAdsAllowed(): Boolean = PremiumBillingManager.adsAllowed.value
 

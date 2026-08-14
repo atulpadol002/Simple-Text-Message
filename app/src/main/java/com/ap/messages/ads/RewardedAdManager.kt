@@ -40,6 +40,10 @@ object RewardedAdManager {
 
     private fun load(context: Context, placement: AdPlacement, source: AdLoadSource) {
         val format = placement.loadFormat()
+        if (!AdRuntime.canLoadAds(format, source)) {
+            loading -= placement
+            return
+        }
         log(placement, "loadStarted=true", source)
         AdDebug.log { "AdLoad format=$format source=$source started" }
         RewardedAd.load(

@@ -33,6 +33,10 @@ object InterstitialAdManager {
     }
 
     private fun load(context: Context, source: AdLoadSource) {
+        if (!AdRuntime.canLoadAds("INTERSTITIAL", source)) {
+            loading = false
+            return
+        }
         AdDebug.log { "AdLoad format=INTERSTITIAL source=$source started" }
         InterstitialAd.load(
             context,

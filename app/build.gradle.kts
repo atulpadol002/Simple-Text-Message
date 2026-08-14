@@ -6,6 +6,23 @@ plugins {
 
 }
 
+val umpDebugGeography = providers.gradleProperty("umpDebugGeography")
+    .orNull
+    ?.trim()
+    ?.uppercase()
+    ?.takeIf { it in setOf("DISABLED", "EEA", "REGULATED_US_STATE", "OTHER") }
+    ?: "DISABLED"
+val umpTestDeviceHash = providers.gradleProperty("umpTestDeviceHash")
+    .orNull
+    ?.trim()
+    ?.uppercase()
+    ?.takeIf { it.matches(Regex("[A-F0-9]+")) }
+    .orEmpty()
+val umpResetTestState = providers.gradleProperty("umpResetTestState")
+    .orNull
+    ?.toBooleanStrictOrNull()
+    ?: false
+
 android {
     namespace = "com.ap.messages"
 
@@ -22,7 +39,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "UMP_DEBUG_GEOGRAPHY", "\"$umpDebugGeography\"")
+            buildConfigField("String", "UMP_TEST_DEVICE_HASH", "\"$umpTestDeviceHash\"")
+            buildConfigField("boolean", "UMP_RESET_TEST_STATE", umpResetTestState.toString())
+        }
         release {
+            buildConfigField("String", "UMP_DEBUG_GEOGRAPHY", "\"DISABLED\"")
+            buildConfigField("String", "UMP_TEST_DEVICE_HASH", "\"\"")
+            buildConfigField("boolean", "UMP_RESET_TEST_STATE", "false")
             optimization {
                 enable = false
             }

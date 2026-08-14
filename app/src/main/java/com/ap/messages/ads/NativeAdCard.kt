@@ -63,6 +63,7 @@ fun NativeAdCard(
 
     LaunchedEffect(placement) {
         fun load(source: AdLoadSource) {
+            if (!AdRuntime.canLoadAds("NATIVE", source)) return
             val unitId = AdUnitIds.native(source)
             AdDebug.log { "AdLoad format=NATIVE source=$source started" }
             AdLoader.Builder(context, unitId)

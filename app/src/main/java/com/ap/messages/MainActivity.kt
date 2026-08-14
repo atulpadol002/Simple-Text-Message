@@ -25,9 +25,12 @@ import com.ap.messages.viewmodel.ThemeViewModel
 import com.ap.messages.notifications.MessageNotificationManager
 import com.ap.messages.sms.DefaultSmsManager
 import com.ap.messages.ads.AdRuntime
+import com.ap.messages.ads.AdConsentManager
 import com.ap.messages.ads.AppOpenAdManager
 import com.ap.messages.ads.AppOpenReason
 import com.ap.messages.ads.AdRemoteConfigManager
+import com.ap.messages.ads.FullScreenAdCoordinator
+import com.ap.messages.ads.FullScreenAdType
 import com.ap.messages.ads.InterstitialAdManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var wasBackgrounded = false
     private var backgroundedAtElapsedRealtime = 0L
     private var pendingAdResume: PendingAdResume? = null
+    private var onboardingConsentStage = OnboardingConsentStage.NOT_STARTED
     private val pendingAdResumeObserver = LifecycleEventObserver { _, event ->
         if (event == Lifecycle.Event.ON_RESUME) {
             val pending = pendingAdResume ?: return@LifecycleEventObserver
@@ -151,6 +155,7 @@ class MainActivity : ComponentActivity() {
         savedInstanceState: Bundle?
     ) {
         super.onCreate(savedInstanceState)
+        prepareUmpDebugTestState()
         lifecycle.addObserver(pendingAdResumeObserver)
         PremiumBillingManager.initialize(applicationContext)
         AdRuntime.initialize(this)
@@ -183,6 +188,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun prepareUmpDebugTestState() {
+        if (
+            !BuildConfig.DEBUG ||
+            !BuildConfig.UMP_RESET_TEST_STATE ||
+            debugUmpResetPerformed
+        ) return
+        debugUmpResetPerformed = true
+        AdConsentManager.resetForDebugTesting(applicationContext)
+        onboardingAdOpportunityConsumed = false
+        AdDebug.log { "UMP debug test state reset" }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -242,6 +259,7 @@ class MainActivity : ComponentActivity() {
         returnedFromBackground: Boolean,
         backgroundDurationMillis: Long
     ) {
+        val onboardingOpportunityWasConsumed = onboardingAdOpportunityConsumed
         val state = refreshPermissionState()
         val adSafe = state.hasCoreMessagingAccess &&
             onboardingPermissionStepsComplete(state) &&
@@ -252,25 +270,18 @@ class MainActivity : ComponentActivity() {
                 "coreSmsAccess=${state.hasCoreMessagingAccess} onboardingComplete=" +
                 onboardingPermissionStepsComplete(state)
         }
-        if (adSafe) AdRuntime.gatherConsent(this)
-        else AdDebug.log { "Consent not gathered; MobileAds initialization and ad requests remain blocked" }
-
-        if (adSafe && !onboardingAdOpportunityConsumed) {
-            onboardingAdOpportunityConsumed = true
-            // Clear permission/default-role return suppression at the one-shot onboarding gate.
-            AdRuntime.consumeAppOpenSuppression()
-            val onboardingShown = InterstitialAdManager.onOnboardingCompleted(
-                this,
-                activitySafe = true
-            )
-            if (!onboardingShown) {
-                AppOpenAdManager.maybeShow(
-                    activity = this,
-                    activitySafe = true,
-                    reason = AppOpenReason.AFTER_ONBOARDING
-                )
+        if (adSafe) {
+            if (!onboardingAdOpportunityConsumed) {
+                continueOnboardingConsentFlow()
+            } else {
+                AdRuntime.gatherConsent(this)
             }
-        } else if (returnedFromBackground) {
+        } else {
+            AdDebug.log { "Consent not gathered; MobileAds initialization and ad requests remain blocked" }
+            AdDebug.log { "ConsentStartup blockedReason=activity_not_safe" }
+        }
+
+        if (returnedFromBackground && onboardingOpportunityWasConsumed) {
             val suppressed = AdRuntime.consumeAppOpenSuppression()
             val longEnough = backgroundDurationMillis >= MIN_WARM_RESUME_BACKGROUND_MILLIS
             if (!suppressed && longEnough) {
@@ -286,6 +297,74 @@ class MainActivity : ComponentActivity() {
                         "blockedReason=${if (suppressed) "suppressed_return" else "short_interruption"}"
                 }
             }
+        }
+    }
+
+    private fun continueOnboardingConsentFlow() {
+        when (onboardingConsentStage) {
+            OnboardingConsentStage.UMP -> return
+
+            OnboardingConsentStage.COMPLETE -> {
+                completeOnboardingAdOpportunity()
+                return
+            }
+
+            OnboardingConsentStage.NOT_STARTED -> Unit
+        }
+
+        if (!AdRuntime.areAdsAllowed()) {
+            AdDebug.log { "ConsentStartup umpLaunch=false" }
+            AdDebug.log { "ConsentStartup blockedReason=premium_ads_suppressed" }
+            onboardingConsentStage = OnboardingConsentStage.UMP
+            AdRuntime.gatherConsent(this, ::onOnboardingConsentComplete)
+            return
+        }
+
+        launchOnboardingUmp()
+    }
+
+    private fun launchOnboardingUmp() {
+        if (onboardingConsentStage == OnboardingConsentStage.UMP) return
+        if (!isAdPresentationSafe()) {
+            onboardingConsentStage = OnboardingConsentStage.NOT_STARTED
+            AdDebug.log { "ConsentStartup umpLaunch=false" }
+            AdDebug.log { "ConsentStartup blockedReason=activity_not_safe" }
+            return
+        }
+        onboardingConsentStage = OnboardingConsentStage.UMP
+        AdDebug.log { "ConsentStartup umpLaunch=true" }
+        AdRuntime.gatherConsent(this, ::onOnboardingConsentComplete)
+    }
+
+    private fun onOnboardingConsentComplete(allowed: Boolean) {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            AdDebug.log { "ConsentStartup canRequestAds=$allowed" }
+            AdDebug.log { "ConsentStartup completed=true" }
+            onboardingConsentStage = OnboardingConsentStage.COMPLETE
+            completeOnboardingAdOpportunity()
+        }
+    }
+
+    private fun completeOnboardingAdOpportunity() {
+        if (onboardingAdOpportunityConsumed) return
+        if (!isAdPresentationSafe() || FullScreenAdCoordinator.activeType() != null) {
+            AdDebug.log { "ConsentStartup blockedReason=onboarding_completion_not_safe" }
+            return
+        }
+        onboardingAdOpportunityConsumed = true
+        // Clear permission/default-role return suppression at the one-shot onboarding gate.
+        AdRuntime.consumeAppOpenSuppression()
+        val onboardingShown = InterstitialAdManager.onOnboardingCompleted(
+            this,
+            activitySafe = true
+        )
+        if (!onboardingShown) {
+            AppOpenAdManager.maybeShow(
+                activity = this,
+                activitySafe = true,
+                reason = AppOpenReason.AFTER_ONBOARDING
+            )
         }
     }
 
@@ -550,9 +629,16 @@ class MainActivity : ComponentActivity() {
         private var lastObservedContactsGranted: Boolean? = null
         private var lastObservedNotificationsGranted: Boolean? = null
         private var onboardingAdOpportunityConsumed = false
+        private var debugUmpResetPerformed = false
         private const val MIN_WARM_RESUME_BACKGROUND_MILLIS = 5_000L
         private const val MAX_HANDLED_NAVIGATION_TOKENS = 64
         private val handledNavigationTokens = linkedSetOf<String>()
+    }
+
+    private enum class OnboardingConsentStage {
+        NOT_STARTED,
+        UMP,
+        COMPLETE
     }
 
     private enum class PermissionRequest {

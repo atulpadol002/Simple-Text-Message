@@ -118,6 +118,17 @@ private class BannerInstance(
 
     private fun load(source: AdLoadSource) {
         if (loadState == BannerLoadState.DESTROYED) return
+        if (!AdRuntime.canLoadAds("BANNER", source)) {
+            loadState = BannerLoadState.IDLE
+            isLoaded = false
+            adView?.let { current ->
+                current.adListener = object : AdListener() {}
+                view.removeView(current)
+                current.destroy()
+            }
+            adView = null
+            return
+        }
         loadState = BannerLoadState.LOADING
         loadSource = source
         isLoaded = false

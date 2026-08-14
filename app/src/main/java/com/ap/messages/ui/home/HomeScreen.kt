@@ -107,6 +107,7 @@ import com.ap.messages.premium.PremiumBillingManager
 import com.ap.messages.premium.PremiumEntitlementStatus
 import com.ap.messages.premium.PremiumPopupSession
 import com.ap.messages.ui.premium.PremiumPaywallPopup
+import com.google.android.ump.ConsentInformation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 
@@ -125,7 +126,11 @@ fun HomeScreen(
     val context = LocalContext.current
     val adConfig by AdRemoteConfigManager.config.collectAsState()
     val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
-    val privacyOptionsRequired by AdConsentManager.privacyOptionsRequired.collectAsState()
+    val privacyOptionsRequirementStatus by
+        AdConsentManager.privacyOptionsRequirementStatus.collectAsState()
+    val revokeConsentVisible =
+        privacyOptionsRequirementStatus ==
+            ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
     val premiumState by PremiumBillingManager.state.collectAsState()
     val activeFullScreen by FullScreenAdCoordinator.activeTypeFlow.collectAsState()
     val configuration = LocalConfiguration.current
@@ -161,6 +166,10 @@ fun HomeScreen(
             "HomeScreen effective config: master=${adConfig.masterEnabled} " +
                 "homeBanner.enabled=${adConfig.homeBanner.enabled} selectionMode=$selectionMode"
         }
+    }
+    LaunchedEffect(privacyOptionsRequirementStatus) {
+        AdDebug.log { "PrivacyDrawer requirementStatus=$privacyOptionsRequirementStatus" }
+        AdDebug.log { "PrivacyDrawer revokeVisible=$revokeConsentVisible" }
     }
     val allSelectedPinned = selectionMode && selectedIds.all { it in pinnedIds }
     val canInteract = isActive &&
@@ -306,44 +315,91 @@ fun HomeScreen(
                 modifier = Modifier.width(drawerWidth),
                 drawerContainerColor = MaterialTheme.colorScheme.surface
             ) {
-                DrawerHeader()
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                Spacer(Modifier.height(10.dp))
-                DrawerItem("Messages", Icons.Default.Home, true) { closeDrawer() }
-                PremiumDrawerItem(
-                    label = if (premiumState.isPremium) "My Subscription" else "Go Premium"
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
-                    closeDrawer {
-                        if (premiumState.isPremium) {
-                            AdRuntime.suppressNextAppOpen()
-                            LegalLinks.openSubscriptionManagement(context)
-                        } else {
-                            onPremiumClick()
+                    item {
+                        DrawerHeader()
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    item {
+                        DrawerItem("Messages", Icons.Default.Home, true) { closeDrawer() }
+                    }
+                    item {
+                        PremiumDrawerItem(
+                            label = if (premiumState.isPremium) "My Subscription" else "Go Premium"
+                        ) {
+                            closeDrawer {
+                                if (premiumState.isPremium) {
+                                    AdRuntime.suppressNextAppOpen()
+                                    LegalLinks.openSubscriptionManagement(context)
+                                } else {
+                                    onPremiumClick()
+                                }
+                            }
                         }
                     }
-                }
-                DrawerItem("Archive", Icons.Default.Archive) { closeDrawer { onDrawerNavigate(Routes.ArchiveChats.route) } }
-                DrawerItem("Theme", Icons.Default.Palette) { closeDrawer { onDrawerNavigate(Routes.Theme.route) } }
-                DrawerItem("Scheduled SMS", Icons.Default.Schedule) { closeDrawer { onDrawerNavigate(Routes.ScheduledSms.route) } }
-                DrawerItem("Block Numbers", Icons.Default.Block) { closeDrawer { onDrawerNavigate(Routes.BlockNumbers.route) } }
-                DrawerItem("Starred Messages", Icons.Default.Star) { closeDrawer { onDrawerNavigate(Routes.StarredMessages.route) } }
-                DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) { closeDrawer { onDrawerNavigate(Routes.RecycleBin.route) } }
-                DrawerItem("About", Icons.Default.Info) {
-                    closeDrawer { onDrawerNavigate(Routes.About.route) }
-                }
-                DrawerItem("Rate Us", Icons.Default.RateReview) {
-                    closeDrawer {
-                        if (!RateUsSession.wasDialogShown) {
-                            RateUsSession.markDialogShown()
-                            selectedRating = 0
-                            showRateUsDialog = true
+                    item {
+                        DrawerItem("Archive", Icons.Default.Archive) {
+                            closeDrawer { onDrawerNavigate(Routes.ArchiveChats.route) }
                         }
                     }
-                }
-                if (privacyOptionsRequired) {
-                    DrawerItem("Privacy options", Icons.Default.PrivacyTip) {
-                        closeDrawer {
-                            (context as? Activity)?.let(AdConsentManager::showPrivacyOptions)
+                    item {
+                        DrawerItem("Theme", Icons.Default.Palette) {
+                            closeDrawer { onDrawerNavigate(Routes.Theme.route) }
+                        }
+                    }
+                    item {
+                        DrawerItem("Scheduled SMS", Icons.Default.Schedule) {
+                            closeDrawer { onDrawerNavigate(Routes.ScheduledSms.route) }
+                        }
+                    }
+                    item {
+                        DrawerItem("Block Numbers", Icons.Default.Block) {
+                            closeDrawer { onDrawerNavigate(Routes.BlockNumbers.route) }
+                        }
+                    }
+                    item {
+                        DrawerItem("Starred Messages", Icons.Default.Star) {
+                            closeDrawer { onDrawerNavigate(Routes.StarredMessages.route) }
+                        }
+                    }
+                    item {
+                        DrawerItem("Recycle Bin", Icons.Default.RestoreFromTrash) {
+                            closeDrawer { onDrawerNavigate(Routes.RecycleBin.route) }
+                        }
+                    }
+                    item {
+                        DrawerItem("About", Icons.Default.Info) {
+                            closeDrawer { onDrawerNavigate(Routes.About.route) }
+                        }
+                    }
+                    if (revokeConsentVisible) {
+                        item {
+                            DrawerItem(
+                                label = "Revoke Consent",
+                                icon = Icons.Default.PrivacyTip,
+                                contentDescription = "Manage or revoke privacy consent"
+                            ) {
+                                AdDebug.log { "PrivacyDrawer revokeTapped=true" }
+                                closeDrawer {
+                                    (context as? Activity)
+                                        ?.let(AdConsentManager::showPrivacyOptions)
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        DrawerItem("Rate Us", Icons.Default.RateReview) {
+                            closeDrawer {
+                                if (!RateUsSession.wasDialogShown) {
+                                    RateUsSession.markDialogShown()
+                                    selectedRating = 0
+                                    showRateUsDialog = true
+                                }
+                            }
                         }
                     }
                 }
@@ -586,11 +642,17 @@ private fun DrawerHeader() {
 }
 
 @Composable
-private fun DrawerItem(label: String, icon: ImageVector, selected: Boolean = false, onClick: () -> Unit) {
+private fun DrawerItem(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean = false,
+    contentDescription: String? = null,
+    onClick: () -> Unit
+) {
     NavigationDrawerItem(
         label = { Text(label) },
         selected = selected,
-        icon = { Icon(icon, null) },
+        icon = { Icon(icon, contentDescription) },
         onClick = onClick,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
     )

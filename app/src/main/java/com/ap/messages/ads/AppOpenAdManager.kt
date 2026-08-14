@@ -52,6 +52,11 @@ object AppOpenAdManager {
     }
 
     private fun load(context: Context, source: AdLoadSource) {
+        if (!AdRuntime.canLoadAds("APP_OPEN", source)) {
+            loading = false
+            loadingSource = null
+            return
+        }
         loadingSource = source
         AdDebug.log { "AdLoad format=APP_OPEN source=$source started" }
         AppOpenAd.load(
