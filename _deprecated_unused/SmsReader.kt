@@ -1,9 +1,9 @@
-package com.ap.messages.sms
+package com.ap.simpletextmessage.sms
 
 import android.content.Context
 import android.provider.Telephony
-import com.ap.messages.data.model.Conversation
-import com.ap.messages.contact.ContactNameResolver
+import com.ap.simpletextmessage.data.model.Conversation
+import com.ap.simpletextmessage.contact.ContactNameResolver
 
 class SmsReader(
     private val context: Context

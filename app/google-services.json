@@ -1,23 +1,21 @@
-
-
 {
   "project_info": {
-    "project_number": "607554418102",
-    "project_id": "message-app-d32a8",
-    "storage_bucket": "message-app-d32a8.firebasestorage.app"
+    "project_number": "23937417609",
+    "project_id": "simple-text-message-a4c69",
+    "storage_bucket": "simple-text-message-a4c69.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:607554418102:android:c910f8af92da7700583d17",
+        "mobilesdk_app_id": "1:23937417609:android:a080fa80bb9a4f4877e158",
         "android_client_info": {
-          "package_name": "com.ap.messages"
+          "package_name": "com.ap.simpletextmessage"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC3J_hAvzKYlriJbQtiap6UQvozbD9UF4I"
+          "current_key": "AIzaSyA70JMr1PEbKIuAOOnVy4zVzd4rl4kCZUE"
         }
       ],
       "services": {

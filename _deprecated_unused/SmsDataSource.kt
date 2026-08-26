@@ -1,9 +1,9 @@
-package com.ap.messages.data.datasource
+package com.ap.simpletextmessage.data.datasource
 
 import android.content.ContentResolver
 import android.content.Context
 import android.provider.Telephony
-import com.ap.messages.data.model.Message
+import com.ap.simpletextmessage.data.model.Message
 
 class SmsDataSource(
     private val context: Context

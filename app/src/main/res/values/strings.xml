@@ -1,3 +1,29 @@
 <resources>
-    <string name="app_name">Message App</string>
+    <string name="app_name">Simple Text Message</string>
+    <string name="language">Language</string>
+    <string name="languages">Languages</string>
+    <string name="system_default">System Default</string>
+    <string name="done">Done</string>
+    <string name="back">Back</string>
+    <string name="language_selected">%1$s selected</string>
+    <string name="language_not_selected">%1$s not selected</string>
+    <string name="messages">Messages</string>
+    <string name="manage_subscription">Manage Subscription</string>
+    <string name="go_premium">Go Premium</string>
+    <string name="archive">Archive</string>
+    <string name="theme">Theme</string>
+    <string name="scheduled_sms">Scheduled SMS</string>
+    <string name="block_numbers">Block Numbers</string>
+    <string name="starred_messages">Starred Messages</string>
+    <string name="recycle_bin">Recycle Bin</string>
+    <string name="about">About</string>
+    <string name="revoke_consent">Revoke Consent</string>
+    <string name="manage_privacy_consent">Manage or revoke privacy consent</string>
+    <string name="rate_us">Rate Us</string>
+    <string name="category_all">All</string>
+    <string name="category_personal">Personal</string>
+    <string name="category_otp">OTP</string>
+    <string name="category_transactions">Transactions</string>
+    <string name="category_offers">Offers</string>
+    <string name="no_category_messages">No %1$s messages</string>
 </resources>
