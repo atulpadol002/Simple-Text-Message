@@ -184,6 +184,15 @@ object AdRemoteConfigManager {
                 "adType=${_adTypeConfig.value[AdTypePlacement.SERVICE_CHAT].remoteValue}"
         }
         AdDebug.log {
+            "final onboardingGetStartedNative.enabled=" +
+                "${_config.value.onboardingGetStartedNative.enabled} " +
+                "adType=${_adTypeConfig.value[AdTypePlacement.ONBOARDING_GET_STARTED].remoteValue}"
+        }
+        AdDebug.log {
+            "final defaultSmsNative.enabled=${_config.value.defaultSmsNative.enabled} " +
+                "adType=${_adTypeConfig.value[AdTypePlacement.DEFAULT_SMS].remoteValue}"
+        }
+        AdDebug.log {
             "final auto interstitial enabled=" +
                 _autoInterstitialConfig.value.enabled
         }
@@ -246,6 +255,8 @@ object AdRemoteConfigManager {
           "serviceChatNative":{"enabled":true,"maxPerSession":50},
           "newMessageNative":{"enabled":true,"maxPerSession":10},
           "languageNative":{"enabled":true,"maxPerSession":10},
+          "onboardingGetStartedNative":{"enabled":true,"maxPerSession":10},
+          "defaultSmsNative":{"enabled":true,"maxPerSession":10},
           "interstitial":{"enabled":true,"frequency":5,"minIntervalSeconds":10,"maxPerSession":20},
           "onboardingInterstitial":{"enabled":true,"maxPerSession":10},
           "appOpen":{"enabled":true,"showAfterOnboarding":true,"showOnResume":true,"minIntervalSeconds":10,"maxPerSession":50},
@@ -269,7 +280,9 @@ object AdRemoteConfigManager {
         {
           "home":"banner","homeInline":"native","archive":"native",
           "scheduled":"banner","blocked":"banner","starred":"banner",
-          "serviceChat":"native","newMessage":"native","language":"native","chat":"banner","rateUs":"none","exit":"none",
+          "serviceChat":"native","newMessage":"native","language":"native",
+          "onboardingGetStarted":"native","defaultSms":"native",
+          "chat":"banner","rateUs":"none","exit":"none",
           "normalInterstitial":"interstitial","autoInterstitial":"interstitial",
           "onboarding":"interstitial","appOpen":"app_open",
           "restore":"rewarded","deleteForever":"rewarded"

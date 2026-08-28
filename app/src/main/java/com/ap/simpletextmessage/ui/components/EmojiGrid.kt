@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.compose.ui.unit.sp
 
 @Composable
@@ -34,7 +36,7 @@ fun EmojiGrid(
                         .size(48.dp)
                         .clickable(
                             role = Role.Button,
-                            onClickLabel = "Insert emoji",
+                            onClickLabel = stringResource(R.string.insert_emoji),
                             onClick = { onEmojiSelected(emoji) }
                         ),
                     contentAlignment = Alignment.Center

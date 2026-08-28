@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 
 @Composable
 fun SearchBar(searchText: String, onValueChange: (String) -> Unit) {
@@ -46,7 +48,7 @@ fun SearchBar(searchText: String, onValueChange: (String) -> Unit) {
                 decorationBox = { inner ->
                     if (searchText.isEmpty()) {
                         Text(
-                            "Search Messages",
+                            stringResource(R.string.search_messages),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 14.sp
                         )

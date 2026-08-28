@@ -26,6 +26,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -40,6 +42,7 @@ import com.ap.simpletextmessage.ads.AdTypePlacement
 import com.ap.simpletextmessage.ads.BannerAd
 import com.ap.simpletextmessage.ads.AdDebug
 import com.ap.simpletextmessage.ads.AdPosition
+import com.ap.simpletextmessage.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,12 +84,22 @@ fun ArchiveChatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (selectionMode) "${selectedIds.size} selected" else "Archive Chats") },
+                title = {
+                    Text(
+                        if (selectionMode) pluralStringResource(
+                            R.plurals.selected_count,
+                            selectedIds.size,
+                            selectedIds.size
+                        ) else stringResource(R.string.archive_chats)
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = if (selectionMode) viewModel::clearSelection else onBackClick) {
                         Icon(
                             if (selectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
-                            if (selectionMode) "Cancel selection" else "Back"
+                            stringResource(
+                                if (selectionMode) R.string.cancel_selection else R.string.back
+                            )
                         )
                     }
                 },
@@ -95,10 +108,10 @@ fun ArchiveChatsScreen(
                         val visibleIds = conversations.map { it.threadId }.toSet()
                         val allSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
                         IconButton(onClick = { viewModel.setVisibleSelection(visibleIds, !allSelected) }) {
-                            Icon(Icons.Default.Check, if (allSelected) "Deselect all" else "Select all")
+                            Icon(Icons.Default.Check, stringResource(if (allSelected) R.string.deselect_all else R.string.select_all))
                         }
                         IconButton(onClick = viewModel::unarchiveSelected) {
-                            Icon(Icons.Default.Unarchive, "Unarchive selected conversations")
+                            Icon(Icons.Default.Unarchive, stringResource(R.string.unarchive_selected_conversations))
                         }
                     }
                 }
@@ -131,7 +144,7 @@ fun ArchiveChatsScreen(
             !hasLoaded && conversations.isEmpty() -> Box(Modifier.fillMaxSize().padding(paddingValues))
             conversations.isEmpty() -> Box(
                 Modifier.fillMaxSize().padding(paddingValues), Alignment.Center
-            ) { Text("No archived conversations") }
+            ) { Text(stringResource(R.string.no_archived_conversations)) }
             else -> LazyColumn(Modifier.fillMaxSize().padding(paddingValues)) {
                 if (
                     !selectionMode && adConfig.archiveNative.enabled &&

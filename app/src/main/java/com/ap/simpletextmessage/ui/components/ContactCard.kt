@@ -17,6 +17,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.data.model.Contact
 import com.ap.simpletextmessage.utils.AvatarColorResolver
 
@@ -33,7 +35,7 @@ fun ContactCard(contact: Contact, onClick: () -> Unit) {
         ) {
             val photo = contact.photo
             if (photo != null) {
-                Image(photo.asImageBitmap(), "Contact photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Image(photo.asImageBitmap(), stringResource(R.string.contact_photo), Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
                 Text(
                     contact.name.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString()

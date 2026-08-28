@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
@@ -50,6 +51,7 @@ import com.ap.simpletextmessage.ads.AdRemoteConfigManager
 import com.ap.simpletextmessage.localization.LanguagePreferences
 import com.ap.simpletextmessage.localization.LanguageFlowPolicy
 import com.ap.simpletextmessage.localization.LanguageScreenOrigin
+import com.ap.simpletextmessage.R
 
 
 @Composable
@@ -80,6 +82,7 @@ fun AppNavigation(
         activity?.permissionState ?: MutableStateFlow(AppPermissionState())
     }
     val permissionState by permissionStateFlow.collectAsState()
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
     val paywallEnabled by AdRemoteConfigManager.paywallEnabled.collectAsState()
     val initialPendingDestination = remember(activity) {
         activity?.pendingChatDestination?.value
@@ -102,6 +105,22 @@ fun AppNavigation(
             ?.route
 
     val navigationInProgress = remember { mutableStateOf(false) }
+
+    LaunchedEffect(
+        currentRoute,
+        adConfig.masterEnabled,
+        adConfig.onboardingGetStartedNative.enabled,
+        adConfig.defaultSmsNative.enabled
+    ) {
+        val onboardingNativeEnabled = when (currentRoute) {
+            Routes.Splash.route -> adConfig.onboardingGetStartedNative.enabled
+            Routes.Permission.route -> adConfig.defaultSmsNative.enabled
+            else -> false
+        }
+        if (adConfig.masterEnabled && onboardingNativeEnabled) {
+            activity?.requestOnboardingNativeAdsConsent()
+        }
+    }
 
     fun runEligibleAdEvent(
         event: AutoInterstitialEvent,
@@ -384,6 +403,7 @@ fun AppNavigation(
                         } else {
                             navController.popBackStack()
                         }
+                        Unit
                     }
                     if (LanguageFlowPolicy.shouldShowDoneInterstitial(origin)) {
                         runEligibleAdEvent(
@@ -595,60 +615,60 @@ fun AppNavigation(
     if (activity?.showSmsSettingsPrompt == true) {
         AlertDialog(
             onDismissRequest = activity::dismissSmsSettingsPrompt,
-            title = { Text("Allow SMS access") },
+            title = { Text(stringResource(R.string.allow_sms_access_title)) },
             text = {
                 Text(
-                    "To send and receive messages, allow the required SMS permissions in system settings."
+                    stringResource(R.string.allow_sms_access_settings_message)
                 )
             },
             confirmButton = {
                 TextButton(onClick = activity::openSmsSettings) {
-                    Text("Open settings")
+                    Text(stringResource(R.string.open_settings))
                 }
             },
             dismissButton = {
                 TextButton(onClick = activity::dismissSmsSettingsPrompt) {
-                    Text("Not now")
+                    Text(stringResource(R.string.not_now))
                 }
             }
         )
     } else if (activity?.showContactsSettingsPrompt == true) {
         AlertDialog(
             onDismissRequest = activity::dismissContactsSettingsPrompt,
-            title = { Text("Allow contacts access") },
+            title = { Text(stringResource(R.string.allow_contacts_access_title)) },
             text = {
                 Text(
-                    "To show contact names and photos, allow Contacts permission in system settings."
+                    stringResource(R.string.allow_contacts_access_settings_message)
                 )
             },
             confirmButton = {
                 TextButton(onClick = activity::openContactsSettings) {
-                    Text("Open settings")
+                    Text(stringResource(R.string.open_settings))
                 }
             },
             dismissButton = {
                 TextButton(onClick = activity::dismissContactsSettingsPrompt) {
-                    Text("Not now")
+                    Text(stringResource(R.string.not_now))
                 }
             }
         )
     } else if (activity?.showNotificationSettingsPrompt == true) {
         AlertDialog(
             onDismissRequest = activity::dismissNotificationSettingsPrompt,
-            title = { Text("Enable notifications") },
+            title = { Text(stringResource(R.string.enable_notifications_title)) },
             text = {
                 Text(
-                    "Allow notifications to receive incoming message alerts."
+                    stringResource(R.string.enable_notifications_message)
                 )
             },
             confirmButton = {
                 TextButton(onClick = activity::openNotificationSettings) {
-                    Text("Open settings")
+                    Text(stringResource(R.string.open_settings))
                 }
             },
             dismissButton = {
                 TextButton(onClick = activity::dismissNotificationSettingsPrompt) {
-                    Text("Not now")
+                    Text(stringResource(R.string.not_now))
                 }
             }
         )

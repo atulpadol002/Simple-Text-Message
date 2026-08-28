@@ -38,6 +38,7 @@ import com.google.android.gms.ads.nativead.AdChoicesView
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
+import com.ap.simpletextmessage.R
 import java.util.concurrent.atomic.AtomicBoolean
 
 private data class NativeInstanceKey(
@@ -160,7 +161,8 @@ fun NativeAdCard(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     cacheKey: String = placement.name,
-    onLoaded: () -> Unit = {}
+    onLoaded: () -> Unit = {},
+    onVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val config by AdRemoteConfigManager.config.collectAsState()
     val adsReady by AdRuntime.mobileAdsReady.collectAsState()
@@ -175,6 +177,7 @@ fun NativeAdCard(
     ) return
 
     val currentOnLoaded by rememberUpdatedState(onLoaded)
+    val currentOnVisibilityChanged by rememberUpdatedState(onVisibilityChanged)
     val hostState = LocalNativeAdHostState.current
     val instance = remember(hostState, placement, cacheKey, configurationRevision) {
         hostState.getOrCreate(NativeInstanceKey(placement, cacheKey, configurationRevision))
@@ -182,6 +185,10 @@ fun NativeAdCard(
     LaunchedEffect(instance) { instance.loadIfNeeded() }
     val ad = instance.nativeAd ?: return
     LaunchedEffect(ad) { currentOnLoaded() }
+    DisposableEffect(ad) {
+        currentOnVisibilityChanged(true)
+        onDispose { currentOnVisibilityChanged(false) }
+    }
     val onSurface = MaterialTheme.colorScheme.onSurface.toArgb()
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     Surface(
@@ -225,7 +232,7 @@ private fun buildCompactNativeAdView(
         gravity = Gravity.CENTER_VERTICAL
     }
     attribution.addView(TextView(context).apply {
-        text = "Ad"
+        text = context.getString(R.string.ad_attribution)
         textSize = 11f
         setTextColor(onSurfaceVariant)
     }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -336,7 +343,7 @@ private fun buildNativeAdView(
         gravity = Gravity.CENTER_VERTICAL
     }
     attribution.addView(TextView(context).apply {
-        text = "Ad"
+        text = context.getString(R.string.ad_attribution)
         textSize = 12f
         setTextColor(onSurfaceVariant)
     }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))

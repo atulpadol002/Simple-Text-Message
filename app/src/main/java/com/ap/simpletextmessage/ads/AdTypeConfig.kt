@@ -31,6 +31,12 @@ enum class AdTypePlacement(
     SERVICE_CHAT("serviceChat", setOf(AdType.NATIVE, AdType.NONE), AdType.NATIVE),
     NEW_MESSAGE("newMessage", setOf(AdType.NATIVE, AdType.NONE), AdType.NATIVE),
     LANGUAGE("language", setOf(AdType.NATIVE, AdType.NONE), AdType.NATIVE),
+    ONBOARDING_GET_STARTED(
+        "onboardingGetStarted",
+        setOf(AdType.NATIVE, AdType.NONE),
+        AdType.NATIVE
+    ),
+    DEFAULT_SMS("defaultSms", setOf(AdType.NATIVE, AdType.NONE), AdType.NATIVE),
     CHAT("chat", setOf(AdType.BANNER, AdType.NONE), AdType.BANNER),
     RATE_US("rateUs", setOf(AdType.NONE), AdType.NONE),
     EXIT("exit", setOf(AdType.NONE), AdType.NONE),

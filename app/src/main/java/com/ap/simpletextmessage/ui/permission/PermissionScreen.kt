@@ -25,6 +25,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -32,9 +34,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.sms.DefaultSmsManager
 import com.ap.simpletextmessage.ads.AdRuntime
+import com.ap.simpletextmessage.ads.AdPlacement
+import com.ap.simpletextmessage.ads.AdRemoteConfigManager
+import com.ap.simpletextmessage.ads.AdType
+import com.ap.simpletextmessage.ads.AdTypePlacement
+import com.ap.simpletextmessage.ads.NativeAdCard
 
 @Composable
 fun PermissionScreen(
@@ -45,6 +53,10 @@ fun PermissionScreen(
 ) {
 
     val context = LocalContext.current
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
+    val defaultSmsNativeEnabled = !isDefaultSmsApp && adConfig.defaultSmsNative.enabled &&
+        adTypeConfig.allows(AdTypePlacement.DEFAULT_SMS, AdType.NATIVE)
     val defaultSmsManager =
         DefaultSmsManager(context)
 
@@ -69,7 +81,7 @@ fun PermissionScreen(
 
         androidx.compose.foundation.Image(
             painter = painterResource(R.drawable.simple_text_message_app_icon),
-            contentDescription = "Simple Text Message logo",
+            contentDescription = stringResource(R.string.app_logo_description),
             modifier = Modifier.size(104.dp),
             contentScale = ContentScale.Fit
         )
@@ -80,9 +92,9 @@ fun PermissionScreen(
         ) {
             Text(
                 text = if (isDefaultSmsApp) {
-                    "Allow Simple Text Message to access SMS"
+                    stringResource(R.string.allow_sms_access)
                 } else {
-                    "Make Simple Text Message your default SMS app"
+                    stringResource(R.string.make_default_sms_app)
                 },
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
@@ -90,9 +102,9 @@ fun PermissionScreen(
             )
             Text(
                 text = if (isDefaultSmsApp) {
-                    "The required SMS permissions are needed to display, send and receive your messages."
+                    stringResource(R.string.sms_permissions_explanation)
                 } else {
-                    "Continue sending, receiving, searching, scheduling and managing all your SMS securely in one place."
+                    stringResource(R.string.default_sms_explanation)
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
@@ -112,10 +124,10 @@ fun PermissionScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 listOf(
-                    "Send & Receive SMS",
-                    "Smart Search",
-                    "Schedule Messages",
-                    "Archive • Star • Block"
+                    stringResource(R.string.send_receive_sms),
+                    stringResource(R.string.smart_search),
+                    stringResource(R.string.schedule_messages),
+                    stringResource(R.string.archive_star_block)
                 ).forEach { feature ->
                     Row(
                         modifier = Modifier
@@ -164,11 +176,20 @@ fun PermissionScreen(
         ) {
             Text(
                 if (isDefaultSmsApp) {
-                    "Allow SMS permissions"
+                    stringResource(R.string.allow_sms_permissions)
                 } else {
-                    "Set as Default SMS App"
+                    stringResource(R.string.set_default_sms_app)
                 }
             )
         }
+
+        NativeAdCard(
+            placement = AdPlacement.DEFAULT_SMS_NATIVE,
+            enabled = defaultSmsNativeEnabled,
+            maxPerSession = adConfig.defaultSmsNative.maxPerSession,
+            modifier = Modifier.widthIn(max = 420.dp),
+            compact = true,
+            cacheKey = "default_sms_native"
+        )
     }
 }

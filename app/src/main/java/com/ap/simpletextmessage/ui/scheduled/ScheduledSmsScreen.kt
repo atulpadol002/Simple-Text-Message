@@ -56,6 +56,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
+import com.ap.simpletextmessage.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -67,10 +70,9 @@ import com.ap.simpletextmessage.data.model.ScheduledSmsStatus
 import com.ap.simpletextmessage.BuildConfig
 import com.ap.simpletextmessage.viewmodel.ContactViewModel
 import com.ap.simpletextmessage.viewmodel.ScheduledSmsViewModel
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 import com.ap.simpletextmessage.ui.components.ScheduledMessageOptionsDialog
 import com.ap.simpletextmessage.ads.AdDebug
 import com.ap.simpletextmessage.ads.AdPlacement
@@ -305,7 +307,7 @@ fun ScheduledSmsScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            text = "Scheduled SMS"
+                            text = stringResource(R.string.scheduled_sms)
                         )
                     },
                     navigationIcon = {
@@ -321,7 +323,7 @@ fun ScheduledSmsScreen(
                                         .Filled
                                         .ArrowBack,
                                 contentDescription =
-                                    "Back"
+                                    stringResource(R.string.back)
                             )
                         }
                     }
@@ -341,7 +343,7 @@ fun ScheduledSmsScreen(
                         imageVector =
                             Icons.Default.Add,
                         contentDescription =
-                            "Add scheduled SMS"
+                            stringResource(R.string.add_scheduled_sms)
                     )
                 }
             },
@@ -398,7 +400,7 @@ fun ScheduledSmsScreen(
 
                         Text(
                             text =
-                                "No scheduled messages",
+                                stringResource(R.string.no_scheduled_messages),
                             style =
                                 MaterialTheme
                                     .typography
@@ -416,7 +418,7 @@ fun ScheduledSmsScreen(
 
                         Text(
                             text =
-                                "Tap + to schedule a message",
+                                stringResource(R.string.tap_to_schedule_message),
                             color =
                                 MaterialTheme
                                     .colorScheme
@@ -497,7 +499,7 @@ fun ScheduledSmsScreen(
                     pendingScheduleContact = null
                     Toast.makeText(
                         context,
-                        "Unable to open Alarms & reminders settings",
+                        context.getString(R.string.unable_open_alarm_settings),
                         Toast.LENGTH_LONG
                     ).show()
                 } else {
@@ -516,7 +518,7 @@ fun ScheduledSmsScreen(
                         )
                         Toast.makeText(
                             context,
-                            "Unable to open Alarms & reminders settings",
+                            context.getString(R.string.unable_open_alarm_settings),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -534,7 +536,7 @@ fun ScheduledSmsScreen(
 
         ScheduledSmsEditorDialog(
             title =
-                "Schedule message",
+                stringResource(R.string.schedule_message),
             contactName =
                 contact.name,
             phoneNumber =
@@ -544,7 +546,7 @@ fun ScheduledSmsScreen(
                 System.currentTimeMillis() +
                         60_000L,
             confirmButtonText =
-                "Schedule",
+                stringResource(R.string.schedule),
             onDismiss = {
 
                 selectedContact = null
@@ -573,7 +575,7 @@ fun ScheduledSmsScreen(
 
                     Toast.makeText(
                         context,
-                        "SMS scheduled",
+                        context.getString(R.string.sms_scheduled),
                         Toast.LENGTH_SHORT
                     ).show()
 
@@ -581,7 +583,7 @@ fun ScheduledSmsScreen(
 
                     Toast.makeText(
                         context,
-                        "Enter message and select a future time",
+                        context.getString(R.string.enter_message_future_time),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -621,7 +623,7 @@ fun ScheduledSmsScreen(
 
                     Toast.makeText(
                         context,
-                        "Scheduled time has already passed",
+                        context.getString(R.string.scheduled_time_passed),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -641,9 +643,9 @@ fun ScheduledSmsScreen(
                 Toast.makeText(
                     context,
                     if (sent) {
-                        "Sending SMS now"
+                        context.getString(R.string.sending_sms_now)
                     } else {
-                        "Unable to send SMS"
+                        context.getString(R.string.unable_send_sms)
                     },
                     Toast.LENGTH_SHORT
                 ).show()
@@ -661,7 +663,7 @@ fun ScheduledSmsScreen(
 
                 Toast.makeText(
                     context,
-                    "Scheduled SMS cancelled",
+                    context.getString(R.string.scheduled_sms_cancelled),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -672,7 +674,7 @@ fun ScheduledSmsScreen(
 
         ScheduledSmsEditorDialog(
             title =
-                "Edit scheduled message",
+                stringResource(R.string.edit_scheduled_message),
 
             contactName =
                 scheduledSms.contactName,
@@ -687,7 +689,7 @@ fun ScheduledSmsScreen(
                 scheduledSms.scheduledTime,
 
             confirmButtonText =
-                "Save changes",
+                stringResource(R.string.save_changes),
 
             onDismiss = {
 
@@ -706,7 +708,7 @@ fun ScheduledSmsScreen(
 
                     Toast.makeText(
                         context,
-                        "Schedule cancelled because its time passed while editing",
+                        context.getString(R.string.schedule_cancelled_while_editing),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -738,7 +740,7 @@ fun ScheduledSmsScreen(
 
                     Toast.makeText(
                         context,
-                        "Scheduled SMS updated",
+                        context.getString(R.string.scheduled_sms_updated),
                         Toast.LENGTH_SHORT
                     ).show()
 
@@ -746,7 +748,7 @@ fun ScheduledSmsScreen(
 
                     Toast.makeText(
                         context,
-                        "Select a valid future time",
+                        context.getString(R.string.select_valid_future_time),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -771,7 +773,7 @@ private fun ContactPickerContent(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Select contact"
+                        text = stringResource(R.string.select_contact)
                     )
                 },
                 navigationIcon = {
@@ -787,7 +789,7 @@ private fun ContactPickerContent(
                                     .Filled
                                     .ArrowBack,
                             contentDescription =
-                                "Back"
+                                stringResource(R.string.back)
                         )
                     }
                 }
@@ -816,7 +818,7 @@ private fun ContactPickerContent(
                     onSearchChange,
                 label = {
                     Text(
-                        text = "Search contact"
+                        text = stringResource(R.string.search_contact)
                     )
                 },
                 singleLine = true,
@@ -836,7 +838,7 @@ private fun ContactPickerContent(
                                 imageVector =
                                     Icons.Default.Close,
                                 contentDescription =
-                                    "Clear search"
+                                    stringResource(R.string.clear_search)
                             )
                         }
                     }
@@ -854,7 +856,7 @@ private fun ContactPickerContent(
 
                     Text(
                         text =
-                            "No contacts found",
+                            stringResource(R.string.no_contacts_found),
                         color =
                             MaterialTheme
                                 .colorScheme
@@ -1135,9 +1137,11 @@ private fun ScheduledSmsCard(
                 )
 
                 Text(
-                    text =
-                        "${scheduledSms.status.displayLabel()} • " +
-                            formatScheduledTime(scheduledSms.scheduledTime),
+                    text = stringResource(
+                        R.string.scheduled_status_time,
+                        stringResource(scheduledSms.status.labelResource()),
+                        formatScheduledTime(scheduledSms.scheduledTime)
+                    ),
                     style =
                         MaterialTheme
                             .typography
@@ -1155,11 +1159,12 @@ private fun ScheduledSmsCard(
 
 }
 
-private fun ScheduledSmsStatus.displayLabel(): String = when (this) {
-    ScheduledSmsStatus.SCHEDULED -> "Scheduled"
-    ScheduledSmsStatus.SENDING -> "Sending"
-    ScheduledSmsStatus.SENT -> "Sent"
-    ScheduledSmsStatus.FAILED -> "Failed"
+@StringRes
+private fun ScheduledSmsStatus.labelResource(): Int = when (this) {
+    ScheduledSmsStatus.SCHEDULED -> R.string.scheduled
+    ScheduledSmsStatus.SENDING -> R.string.sending
+    ScheduledSmsStatus.SENT -> R.string.sent
+    ScheduledSmsStatus.FAILED -> R.string.failed
 }
 
 @Composable
@@ -1257,7 +1262,7 @@ private fun ScheduledSmsEditorDialog(
                     },
                     label = {
                         Text(
-                            text = "Message"
+                            text = stringResource(R.string.message)
                         )
                     },
                     minLines = 3,
@@ -1349,7 +1354,7 @@ private fun ScheduledSmsEditorDialog(
                             ) {
 
                                 Text(
-                                    text = "Date"
+                                    text = stringResource(R.string.date)
                                 )
                             }
 
@@ -1384,7 +1389,7 @@ private fun ScheduledSmsEditorDialog(
                             ) {
 
                                 Text(
-                                    text = "Time"
+                                    text = stringResource(R.string.time)
                                 )
                             }
                         }
@@ -1418,7 +1423,7 @@ private fun ScheduledSmsEditorDialog(
             ) {
 
                 Text(
-                    text = "Cancel"
+                    text = stringResource(R.string.cancel)
                 )
             }
         }
@@ -1591,10 +1596,5 @@ private fun formatScheduledTime(
     time: Long
 ): String {
 
-    return SimpleDateFormat(
-        "dd MMM yyyy, hh:mm a",
-        Locale.getDefault()
-    ).format(
-        Date(time)
-    )
+    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(time))
 }

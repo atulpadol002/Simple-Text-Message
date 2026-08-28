@@ -85,9 +85,14 @@ fun LanguageScreen(
         ) {
             items(AppLanguage.entries, key = AppLanguage::languageTag) { language ->
                 val selected = language == selectedLanguage
+                val displayName = if (language == AppLanguage.SYSTEM_DEFAULT) {
+                    stringResource(R.string.system_default)
+                } else {
+                    language.nativeName
+                }
                 val selectionDescription = stringResource(
                     if (selected) R.string.language_selected else R.string.language_not_selected,
-                    language.nativeName
+                    displayName
                 )
                 ListItem(
                     modifier = Modifier
@@ -100,11 +105,7 @@ fun LanguageScreen(
                         .semantics { contentDescription = selectionDescription },
                     headlineContent = {
                         Text(
-                            text = if (language == AppLanguage.SYSTEM_DEFAULT) {
-                                stringResource(R.string.system_default)
-                            } else {
-                                language.nativeName
-                            }
+                            text = displayName
                         )
                     },
                     supportingContent = language.englishName?.let { englishName ->

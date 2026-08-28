@@ -23,11 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.data.model.Message
 import com.ap.simpletextmessage.data.model.MessageStatus
-import java.text.SimpleDateFormat
+import android.text.format.DateFormat
 import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -42,6 +44,7 @@ fun MessageBubble(
     retryEnabled: Boolean = true,
     onLongClick: (Message) -> Unit = {}
 ) {
+    val context = LocalContext.current
 
     val bubbleAlignment =
         if (message.isIncoming) {
@@ -88,13 +91,7 @@ fun MessageBubble(
             )
         }
 
-    val formattedTime =
-        SimpleDateFormat(
-            "hh:mm a",
-            Locale.getDefault()
-        ).format(
-            Date(message.timestamp)
-        )
+    val formattedTime = DateFormat.getTimeFormat(context).format(Date(message.timestamp))
 
     Box(
         modifier = Modifier
@@ -173,7 +170,7 @@ fun MessageBubble(
                             imageVector =
                                 Icons.Default.Star,
                             contentDescription =
-                                "Starred message",
+                                stringResource(R.string.starred_message),
                             tint =
                                 MaterialTheme
                                     .colorScheme
@@ -204,7 +201,7 @@ fun MessageBubble(
                             MessageStatus.SENDING -> {
 
                                 Text(
-                                    text = "Sending",
+                                    text = stringResource(R.string.sending),
                                     color =
                                         textColor.copy(
                                             alpha = 0.65f
@@ -216,7 +213,7 @@ fun MessageBubble(
                             MessageStatus.SENT -> {
 
                                 Text(
-                                    text = "✓ Sent",
+                                    text = stringResource(R.string.sent_status),
                                     color =
                                         textColor.copy(
                                             alpha = 0.7f
@@ -229,7 +226,7 @@ fun MessageBubble(
 
                                 Text(
                                     text =
-                                        "✓✓ Delivered",
+                                        stringResource(R.string.delivered_status),
                                     color =
                                         MaterialTheme
                                             .colorScheme
@@ -257,7 +254,7 @@ fun MessageBubble(
                                                 }
                                             ),
                                     text =
-                                        if (retryEnabled) "Failed • Retry" else "Failed",
+                                        stringResource(if (retryEnabled) R.string.failed_retry else R.string.failed),
                                     color =
                                         MaterialTheme
                                             .colorScheme

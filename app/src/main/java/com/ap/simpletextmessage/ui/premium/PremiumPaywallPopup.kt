@@ -40,9 +40,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.ap.simpletextmessage.R
 
 @Composable
 fun PremiumPaywallPopup(
@@ -78,12 +79,12 @@ fun PremiumPaywallPopup(
                 ) {
                     Image(
                         painter = painterResource(R.drawable.paywall_icon),
-                        contentDescription = "Premium",
+                        contentDescription = stringResource(R.string.premium),
                         modifier = Modifier.size(width = 164.dp, height = 110.dp),
                         contentScale = ContentScale.Fit
                     )
                     Text(
-                        text = "Enjoy Messages Without Ads",
+                        text = stringResource(R.string.enjoy_messages_without_ads),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = PremiumInk,
@@ -91,7 +92,7 @@ fun PremiumPaywallPopup(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Upgrade for a clean, distraction-free messaging experience.",
+                        text = stringResource(R.string.upgrade_ad_free),
                         style = MaterialTheme.typography.bodyLarge,
                         color = PremiumMuted,
                         textAlign = TextAlign.Center
@@ -123,13 +124,13 @@ fun PremiumPaywallPopup(
                             }
                             Column {
                                 Text(
-                                    text = "No Ads",
+                                    text = stringResource(R.string.no_ads),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = PremiumInk
                                 )
                                 Text(
-                                    text = "Keep conversations clear of ad interruptions.",
+                                    text = stringResource(R.string.no_ad_interruptions),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = PremiumMuted
                                 )
@@ -145,13 +146,13 @@ fun PremiumPaywallPopup(
                         shape = RoundedCornerShape(17.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PremiumGreen)
                     ) {
-                        Text("Go Premium", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.go_premium), fontWeight = FontWeight.SemiBold)
                     }
                     TextButton(
                         onClick = onNotNow,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Not Now", color = PremiumMuted)
+                        Text(stringResource(R.string.not_now_title_case), color = PremiumMuted)
                     }
                 }
             }

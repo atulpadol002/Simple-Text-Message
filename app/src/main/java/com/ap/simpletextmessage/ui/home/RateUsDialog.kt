@@ -36,6 +36,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -77,7 +80,7 @@ internal fun RateUsDialog(
                     RocketIllustration()
                     Spacer(Modifier.height(20.dp))
                     Text(
-                        text = "Help us Soar!",
+                        text = stringResource(R.string.help_us_soar),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -85,7 +88,7 @@ internal fun RateUsDialog(
                     )
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "Love the app? Give us a stellar rating on the Play Store!",
+                        text = stringResource(R.string.rate_us_message),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -103,7 +106,7 @@ internal fun RateUsDialog(
                             ) {
                                 Icon(
                                     imageVector = if (selected) Icons.Rounded.Star else Icons.Rounded.StarOutline,
-                                    contentDescription = "Set rating to $rating star${if (rating == 1) "" else "s"}",
+                                    contentDescription = pluralStringResource(R.plurals.set_star_rating, rating, rating),
                                     tint = if (selected) SelectedStarColor else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(36.dp)
                                 )
@@ -123,10 +126,10 @@ internal fun RateUsDialog(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
-                        Text("Count Me In", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.count_me_in), fontWeight = FontWeight.SemiBold)
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("Not Now", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.not_now_title_case), fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

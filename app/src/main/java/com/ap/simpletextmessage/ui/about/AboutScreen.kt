@@ -47,12 +47,12 @@ fun AboutScreen(onBackClick: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("About") },
+                title = { Text(stringResource(R.string.about)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -71,7 +71,7 @@ fun AboutScreen(onBackClick: () -> Unit) {
                 factory = { imageContext ->
                     ImageView(imageContext).apply {
                         setImageResource(R.drawable.simple_text_message_app_icon)
-                        contentDescription = "Simple Text Message icon"
+                        contentDescription = context.getString(R.string.app_icon_description)
                         adjustViewBounds = true
                         scaleType = ImageView.ScaleType.FIT_CENTER
                     }
@@ -91,7 +91,7 @@ fun AboutScreen(onBackClick: () -> Unit) {
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "Version ${BuildConfig.VERSION_NAME}",
+                text = stringResource(R.string.version_name, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -100,7 +100,7 @@ fun AboutScreen(onBackClick: () -> Unit) {
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "Fast • Secure • Reliable",
+                text = stringResource(R.string.brand_tagline),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -109,7 +109,7 @@ fun AboutScreen(onBackClick: () -> Unit) {
             Spacer(Modifier.height(36.dp))
 
             LegalButton(
-                text = "Privacy Policy",
+                text = stringResource(R.string.privacy_policy),
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Policy,
@@ -122,7 +122,7 @@ fun AboutScreen(onBackClick: () -> Unit) {
             Spacer(Modifier.height(14.dp))
 
             LegalButton(
-                text = "Terms & Conditions",
+                text = stringResource(R.string.terms_conditions),
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Description,

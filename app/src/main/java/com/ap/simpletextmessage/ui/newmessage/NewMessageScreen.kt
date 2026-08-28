@@ -20,6 +20,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ap.simpletextmessage.ui.components.ContactCard
 import com.ap.simpletextmessage.viewmodel.ContactViewModel
@@ -61,7 +63,7 @@ fun NewMessageScreen(
         TopAppBar(
             navigationIcon = {
                 IconButton(onClick = { handleBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, if (searching) "Close search" else "Back")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(if (searching) R.string.close_search else R.string.back))
                 }
             },
             title = {
@@ -73,15 +75,15 @@ fun NewMessageScreen(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        decorationBox = { inner -> if (query.isEmpty()) Text("Search contacts", color = MaterialTheme.colorScheme.onSurfaceVariant); inner() }
+                        decorationBox = { inner -> if (query.isEmpty()) Text(stringResource(R.string.search_contacts), color = MaterialTheme.colorScheme.onSurfaceVariant); inner() }
                     )
-                } else Text("New Message")
+                } else Text(stringResource(R.string.new_message))
             },
             actions = {
                 if (searching && query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") }
+                    IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, stringResource(R.string.clear_search)) }
                 } else if (!searching) {
-                    IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, "Search contacts") }
+                    IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, stringResource(R.string.search_contacts)) }
                 }
             }
         )
@@ -95,7 +97,7 @@ fun NewMessageScreen(
                 Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
                     CircularProgressIndicator(strokeWidth = 3.dp)
                     androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
-                    Text("Loading contacts...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.loading_contacts), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -103,7 +105,7 @@ fun NewMessageScreen(
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 contentAlignment = androidx.compose.ui.Alignment.Center
-            ) { Text("No contacts available", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            ) { Text(stringResource(R.string.no_contacts_available), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         ContactUiState.Error -> {
             androidx.compose.foundation.layout.Box(
@@ -111,8 +113,8 @@ fun NewMessageScreen(
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
-                    Text("Unable to load contacts", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = viewModel::loadContacts) { Text("Retry") }
+                    Text(stringResource(R.string.unable_load_contacts), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = viewModel::loadContacts) { Text(stringResource(R.string.retry)) }
                 }
             }
         }

@@ -22,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.theme.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,7 +38,7 @@ fun ThemeScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Theme"
+                        text = stringResource(R.string.theme)
                     )
                 },
                 navigationIcon = {
@@ -48,7 +50,7 @@ fun ThemeScreen(
                                 Icons.AutoMirrored
                                     .Filled
                                     .ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 }
@@ -62,9 +64,8 @@ fun ThemeScreen(
                 .padding(paddingValues)
         ) {
             ThemeOption(
-                title = "System mode",
-                description =
-                    "Follow your phone's theme setting",
+                title = stringResource(R.string.system_mode),
+                description = stringResource(R.string.system_mode_description),
                 selected =
                     selectedTheme == ThemeMode.SYSTEM,
                 onClick = {
@@ -77,9 +78,8 @@ fun ThemeScreen(
             HorizontalDivider()
 
             ThemeOption(
-                title = "Light theme",
-                description =
-                    "Always use light appearance",
+                title = stringResource(R.string.light_theme),
+                description = stringResource(R.string.light_theme_description),
                 selected =
                     selectedTheme == ThemeMode.LIGHT,
                 onClick = {
@@ -92,9 +92,8 @@ fun ThemeScreen(
             HorizontalDivider()
 
             ThemeOption(
-                title = "Dark theme",
-                description =
-                    "Always use dark appearance",
+                title = stringResource(R.string.dark_theme),
+                description = stringResource(R.string.dark_theme_description),
                 selected =
                     selectedTheme == ThemeMode.DARK,
                 onClick = {

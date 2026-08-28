@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
@@ -58,22 +60,22 @@ fun StarredMessagesScreen(
         if (selectionMode) {
             TopAppBar(
                 title = { Text(selectedIds.size.toString()) },
-                navigationIcon = { IconButton(onClick = { selectedIds = emptySet() }) { Icon(Icons.Default.Close, "Close selection") } },
+                navigationIcon = { IconButton(onClick = { selectedIds = emptySet() }) { Icon(Icons.Default.Close, stringResource(R.string.close_selection)) } },
                 actions = {
                     val visibleIds = messages.map { it.id }.toSet()
                     val allSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
                     IconButton(onClick = { selectedIds = if (allSelected) selectedIds - visibleIds else selectedIds + visibleIds }) {
-                        Icon(Icons.Default.Check, if (allSelected) "Deselect all" else "Select all")
+                        Icon(Icons.Default.Check, stringResource(if (allSelected) R.string.deselect_all else R.string.select_all))
                     }
                     IconButton(onClick = {
                         viewModel.unstar(selectedIds)
                         selectedIds = emptySet()
-                    }) { Icon(Icons.Outlined.StarOutline, "Unstar") }
+                    }) { Icon(Icons.Outlined.StarOutline, stringResource(R.string.unstar)) }
                 }
             )
         } else TopAppBar(
-            title = { Text("Starred Messages") },
-            navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
+            title = { Text(stringResource(R.string.starred_messages)) },
+            navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } }
         )
     }, bottomBar = {
         when (adTypeConfig[AdTypePlacement.STARRED]) {
@@ -95,11 +97,11 @@ fun StarredMessagesScreen(
         when {
             loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(); Spacer(Modifier.height(12.dp)); Text("Loading starred messages...")
+                    CircularProgressIndicator(); Spacer(Modifier.height(12.dp)); Text(stringResource(R.string.loading_starred_messages))
                 }
             }
             messages.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No starred messages", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.no_starred_messages), style = MaterialTheme.typography.titleMedium)
             }
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(messages, key = SmsMessage::id) { message ->
@@ -138,7 +140,7 @@ private fun StarredRow(message: SmsMessage, displayName: String, selected: Boole
                 Spacer(Modifier.height(5.dp))
                 Text(message.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (message.type == Telephony.Sms.MESSAGE_TYPE_INBOX) "Incoming" else "Outgoing",
+                    stringResource(if (message.type == Telephony.Sms.MESSAGE_TYPE_INBOX) R.string.incoming else R.string.outgoing),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

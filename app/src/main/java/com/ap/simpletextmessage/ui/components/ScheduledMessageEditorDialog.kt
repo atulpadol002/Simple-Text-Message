@@ -31,12 +31,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
+import com.ap.simpletextmessage.R
 
 @Composable
 fun ScheduledMessageEditorDialog(
@@ -133,7 +134,7 @@ fun ScheduledMessageEditorDialog(
                         messageText = it
                     },
                     label = {
-                        Text("Message")
+                        Text(stringResource(R.string.message))
                     },
                     minLines = 3,
                     maxLines = 5
@@ -230,7 +231,7 @@ fun ScheduledMessageEditorDialog(
                                         Modifier.padding(
                                             start = 6.dp
                                         ),
-                                    text = "Date"
+                                    text = stringResource(R.string.date)
                                 )
                             }
 
@@ -272,7 +273,7 @@ fun ScheduledMessageEditorDialog(
                                         Modifier.padding(
                                             start = 6.dp
                                         ),
-                                    text = "Time"
+                                    text = stringResource(R.string.time)
                                 )
                             }
                         }
@@ -302,7 +303,7 @@ fun ScheduledMessageEditorDialog(
             TextButton(
                 onClick = onDismiss
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -467,10 +468,5 @@ private fun formatScheduledTime(
     time: Long
 ): String {
 
-    return SimpleDateFormat(
-        "dd MMM yyyy, hh:mm a",
-        Locale.getDefault()
-    ).format(
-        Date(time)
-    )
+    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(time))
 }

@@ -451,34 +451,34 @@ fun HomeScreen(
                         title = { Text(selectedIds.size.toString()) },
                         navigationIcon = {
                             IconButton(onClick = homeViewModel::clearSelection) {
-                                Icon(Icons.Default.Close, "Cancel selection")
+                                Icon(Icons.Default.Close, stringResource(R.string.cancel_selection))
                             }
                         },
                         actions = {
                             val visibleIds = filteredConversations.map { it.threadId }.toSet()
                             val allVisibleSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
                             IconButton(onClick = { homeViewModel.setVisibleSelection(visibleIds, !allVisibleSelected) }) {
-                                Icon(Icons.Default.Check, if (allVisibleSelected) "Deselect all" else "Select all")
+                                Icon(Icons.Default.Check, stringResource(if (allVisibleSelected) R.string.deselect_all else R.string.select_all))
                             }
                             IconButton(onClick = homeViewModel::togglePinnedSelection) {
                                 if (allSelectedPinned) {
                                     Image(
                                         painter = painterResource(R.drawable.unpin_icon),
-                                        contentDescription = "Unpin chat",
+                                        contentDescription = stringResource(R.string.unpin_chat),
                                         modifier = Modifier.size(24.dp)
                                     )
                                 } else {
-                                    Icon(Icons.Default.PushPin, "Pin chat")
+                                    Icon(Icons.Default.PushPin, stringResource(R.string.pin_chat))
                                 }
                             }
                             IconButton(onClick = homeViewModel::archiveSelected) {
-                                Icon(Icons.Default.Archive, "Archive selected conversations")
+                                Icon(Icons.Default.Archive, stringResource(R.string.archive_selected_conversations))
                             }
                             IconButton(onClick = homeViewModel::blockSelected) {
-                                Icon(Icons.Default.Block, "Block selected conversations")
+                                Icon(Icons.Default.Block, stringResource(R.string.block_selected_conversations))
                             }
                             IconButton(enabled = !deleting, onClick = { showDeleteDialog = true }) {
-                                Icon(Icons.Default.Delete, "Delete selected conversations")
+                                Icon(Icons.Default.Delete, stringResource(R.string.delete_selected_conversations))
                             }
                         }
                     )
@@ -488,7 +488,7 @@ fun HomeScreen(
                             IconButton(onClick = {
                                 requestDrawerOpen()
                             }) {
-                                Icon(Icons.Default.Menu, "Open navigation menu")
+                                Icon(Icons.Default.Menu, stringResource(R.string.open_navigation_menu))
                             }
                         },
                         title = { SearchBar(searchText, onValueChange = { searchText = it }) },
@@ -497,7 +497,7 @@ fun HomeScreen(
                             IconButton(onClick = onPremiumClick) {
                                 Image(
                                     painter = painterResource(R.drawable.paywall_icon),
-                                    contentDescription = "Open Premium",
+                                    contentDescription = stringResource(R.string.open_premium),
                                     modifier = Modifier.size(width = 40.dp, height = 30.dp),
                                     contentScale = ContentScale.Fit
                                 )
@@ -514,7 +514,7 @@ fun HomeScreen(
                     containerColor = newMessageFabContainerColor,
                     contentColor = newMessageFabContentColor
                 ) {
-                    Icon(Icons.Default.Add, "New message")
+                    Icon(Icons.Default.Add, stringResource(R.string.new_message))
                 }
             },
             bottomBar = {
@@ -546,7 +546,7 @@ fun HomeScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
                             Spacer(Modifier.height(12.dp))
-                            Text("Syncing messages...")
+                            Text(stringResource(R.string.syncing_messages))
                         }
                     }
                 } else {
@@ -594,8 +594,8 @@ fun HomeScreen(
                         if (filteredConversations.isEmpty() && !isLoading) item {
                             Box(Modifier.fillParentMaxSize(), Alignment.Center) {
                                 Text(
-                                    if (searchText.isNotBlank()) "No matching messages"
-                                    else if (selectedCategory == MessageCategory.ALL) "No messages found"
+                                    if (searchText.isNotBlank()) stringResource(R.string.no_matching_messages)
+                                    else if (selectedCategory == MessageCategory.ALL) stringResource(R.string.no_messages_found)
                                     else stringResource(
                                         R.string.no_category_messages,
                                         stringResource(selectedCategory.labelResource())
@@ -621,7 +621,7 @@ fun HomeScreen(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     ) {
-                        Icon(Icons.Default.ArrowUpward, "Scroll to top")
+                        Icon(Icons.Default.ArrowUpward, stringResource(R.string.scroll_to_top))
                     }
                 }
             }
@@ -631,11 +631,10 @@ fun HomeScreen(
 
     if (showDeleteDialog) AlertDialog(
         onDismissRequest = { if (!deleting) showDeleteDialog = false },
-        title = { Text("Delete conversation?", style = MaterialTheme.typography.titleLarge) },
+        title = { Text(stringResource(R.string.delete_conversation_title), style = MaterialTheme.typography.titleLarge) },
         text = {
             Text(
-                if (selectedIds.size == 1) "This conversation will be moved to Recycle Bin."
-                else "These conversations will be moved to Recycle Bin.",
+                stringResource(if (selectedIds.size == 1) R.string.conversation_moved_recycle_bin else R.string.conversations_moved_recycle_bin),
                 style = MaterialTheme.typography.bodyMedium
             )
         },
@@ -643,9 +642,9 @@ fun HomeScreen(
             TextButton(enabled = !deleting, onClick = {
                 showDeleteDialog = false
                 homeViewModel.deleteSelected()
-            }) { Text("Delete") }
+            }) { Text(stringResource(R.string.delete)) }
         },
-        dismissButton = { TextButton(enabled = !deleting, onClick = { showDeleteDialog = false }) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !deleting, onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.cancel)) } }
     )
 
     if (showRateUsDialog) RateUsDialog(
@@ -660,10 +659,10 @@ fun HomeScreen(
 
     if (showExitDialog) AlertDialog(
         onDismissRequest = { showExitDialog = false },
-        title = { Text("Exit Simple Text Message?", style = MaterialTheme.typography.titleLarge) },
-        text = { Text("Are you sure you want to exit?", style = MaterialTheme.typography.bodyMedium) },
-        confirmButton = { TextButton(onClick = { showExitDialog = false; (context as? Activity)?.finish() }) { Text("Exit") } },
-        dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Cancel") } }
+        title = { Text(stringResource(R.string.exit_app_title), style = MaterialTheme.typography.titleLarge) },
+        text = { Text(stringResource(R.string.exit_app_message), style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = { TextButton(onClick = { showExitDialog = false; (context as? Activity)?.finish() }) { Text(stringResource(R.string.exit)) } },
+        dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text(stringResource(R.string.cancel)) } }
     )
 
     if (showPremiumPopup && paywallEnabled) {
@@ -715,13 +714,13 @@ private fun DrawerHeader() {
     ) {
         Image(
             painter = painterResource(R.drawable.simple_text_message_app_icon),
-            contentDescription = "Simple Text Message logo",
+            contentDescription = stringResource(R.string.app_logo_description),
             modifier = Modifier.size(52.dp),
             contentScale = ContentScale.Fit
         )
         Column(Modifier.padding(start = 16.dp)) {
-            Text("Simple Text Message", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text("SMS conversations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.sms_conversations), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -757,7 +756,7 @@ private fun PremiumDrawerItem(label: String, onClick: () -> Unit) {
         icon = {
             Image(
                 painter = painterResource(R.drawable.paywall_icon),
-                contentDescription = "Premium",
+                contentDescription = stringResource(R.string.premium),
                 modifier = Modifier.size(24.dp),
                 contentScale = ContentScale.Fit
             )

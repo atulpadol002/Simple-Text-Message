@@ -44,14 +44,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ap.simpletextmessage.data.model.DeletedConversation
 import com.ap.simpletextmessage.viewmodel.RecycleBinViewModel
 import com.ap.simpletextmessage.utils.AvatarColorResolver
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import java.text.DateFormat
+import java.util.Date
 import com.ap.simpletextmessage.ads.AdPlacement
 import com.ap.simpletextmessage.ads.AdRemoteConfigManager
 import com.ap.simpletextmessage.ads.AdRuntime
@@ -109,21 +111,21 @@ fun RecycleBinScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (selectionMode) "${selectedIds.size} selected" else "Recycle Bin") },
+                title = { Text(if (selectionMode) pluralStringResource(R.plurals.selected_count, selectedIds.size, selectedIds.size) else stringResource(R.string.recycle_bin)) },
                 navigationIcon = {
                         IconButton(onClick = if (selectionMode) ({ selectedIds = emptySet() }) else onBackClick
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 },
                 actions = { if (selectionMode) {
                     val all = deletedConversations.isNotEmpty() && deletedConversations.all { it.recycleBinId in selectedIds }
-                    IconButton(onClick = { val ids = deletedConversations.map { it.recycleBinId }.toSet(); selectedIds = if (all) selectedIds - ids else selectedIds + ids }) { Icon(Icons.Default.Check, if (all) "Deselect all" else "Select all") }
-                    IconButton(onClick = { dialog = "restore" }) { Icon(Icons.Default.RestoreFromTrash, "Restore") }
-                    IconButton(onClick = { dialog = "delete" }) { Icon(Icons.Default.DeleteForever, "Delete forever", tint = MaterialTheme.colorScheme.error) }
+                    IconButton(onClick = { val ids = deletedConversations.map { it.recycleBinId }.toSet(); selectedIds = if (all) selectedIds - ids else selectedIds + ids }) { Icon(Icons.Default.Check, stringResource(if (all) R.string.deselect_all else R.string.select_all)) }
+                    IconButton(onClick = { dialog = "restore" }) { Icon(Icons.Default.RestoreFromTrash, stringResource(R.string.restore)) }
+                    IconButton(onClick = { dialog = "delete" }) { Icon(Icons.Default.DeleteForever, stringResource(R.string.delete_forever), tint = MaterialTheme.colorScheme.error) }
                 } }
             )
         }
@@ -147,7 +149,7 @@ fun RecycleBinScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Recycle Bin is empty")
+                    Text(stringResource(R.string.recycle_bin_empty))
                 }
             }
 
@@ -191,7 +193,7 @@ fun RecycleBinScreen(
             }
         }
     }
-    dialog?.let { action -> AlertDialog(onDismissRequest = { dialog = null }, title = { Text(if (action == "restore") "Restore conversations?" else "Delete forever?") }, text = { Text(if (action == "restore") "Restore the selected conversations?" else "These conversations cannot be restored after permanent deletion.") }, confirmButton = { Button(onClick = { val ids = selectedIds; dialog = null; selectedIds = emptySet(); if (action == "restore") performWithReward(AdPlacement.REWARDED_RESTORE) { recycleBinViewModel.restoreSelected(ids) } else performWithReward(AdPlacement.REWARDED_DELETE) { recycleBinViewModel.deleteSelected(ids) } }) { Text(if (action == "restore") "Restore" else "Delete Forever") } }, dismissButton = { Button(onClick = { dialog = null }) { Text("Cancel") } }) }
+    dialog?.let { action -> AlertDialog(onDismissRequest = { dialog = null }, title = { Text(stringResource(if (action == "restore") R.string.restore_conversations_question else R.string.delete_forever_question)) }, text = { Text(stringResource(if (action == "restore") R.string.restore_selected_conversations else R.string.permanent_delete_conversations_warning)) }, confirmButton = { Button(onClick = { val ids = selectedIds; dialog = null; selectedIds = emptySet(); if (action == "restore") performWithReward(AdPlacement.REWARDED_RESTORE) { recycleBinViewModel.restoreSelected(ids) } else performWithReward(AdPlacement.REWARDED_DELETE) { recycleBinViewModel.deleteSelected(ids) } }) { Text(stringResource(if (action == "restore") R.string.restore else R.string.delete_forever)) } }, dismissButton = { Button(onClick = { dialog = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 
 @Composable
@@ -243,7 +245,7 @@ private fun DeletedConversationCard(
             )
 
             Text(
-                text = "Deleted ${formatDeletedAt(conversation.deletedAt)}",
+                text = stringResource(R.string.deleted_at, formatDeletedAt(conversation.deletedAt)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -257,9 +259,9 @@ private fun DeletedConversationCard(
                 ) {
                     Text(
                         if (isRestoring) {
-                            "Restoring..."
+                            stringResource(R.string.restoring)
                         } else {
-                            "Restore"
+                            stringResource(R.string.restore)
                         }
                     )
                 }
@@ -270,7 +272,7 @@ private fun DeletedConversationCard(
                     },
                     enabled = !isProcessing
                 ) {
-                    Text("Delete Forever")
+                    Text(stringResource(R.string.delete_forever))
                 }
             }
         }
@@ -283,11 +285,11 @@ private fun DeletedConversationCard(
                 showDeleteConfirmation = false
             },
             title = {
-                Text("Delete forever?")
+                Text(stringResource(R.string.delete_forever_question))
             },
             text = {
                 Text(
-                    "This conversation cannot be restored after permanent deletion."
+                    stringResource(R.string.permanent_delete_conversation_warning)
                 )
             },
             confirmButton = {
@@ -297,7 +299,7 @@ private fun DeletedConversationCard(
                         onDeleteForeverClick()
                     }
                 ) {
-                    Text("Delete Forever")
+                    Text(stringResource(R.string.delete_forever))
                 }
             },
             dismissButton = {
@@ -306,21 +308,15 @@ private fun DeletedConversationCard(
                         showDeleteConfirmation = false
                     }
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
     }
 }
 
-private fun formatDeletedAt(
-    deletedAt: Long
-): String = Instant.ofEpochMilli(deletedAt)
-    .atZone(ZoneId.systemDefault())
-    .format(DELETED_AT_FORMATTER)
-
-private val DELETED_AT_FORMATTER: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a")
+private fun formatDeletedAt(deletedAt: Long): String =
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(deletedAt))
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

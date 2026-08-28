@@ -24,6 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ap.simpletextmessage.viewmodel.BlockedNumbersViewModel
 import com.ap.simpletextmessage.viewmodel.ContactViewModel
@@ -57,18 +61,18 @@ fun BlockedNumbersScreen(
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text(if (selectionMode) "${selected.size} selected" else "Blocked Numbers") },
+            title = { Text(if (selectionMode) pluralStringResource(R.plurals.selected_count, selected.size, selected.size) else stringResource(R.string.blocked_numbers)) },
             navigationIcon = {
                     IconButton(onClick = if (selectionMode) blockedNumbersViewModel::clearSelection else onBackClick) {
-                    Icon(if (selectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack, if (selectionMode) "Close" else "Back")
+                    Icon(if (selectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack, stringResource(if (selectionMode) R.string.close else R.string.back))
                 }
             },
             actions = {
                 if (selectionMode) {
                     val all = blockedNumbers.isNotEmpty() && blockedNumbers.all { it in selected }
-                    IconButton(onClick = { blockedNumbersViewModel.setVisibleSelection(blockedNumbers.toSet(), !all) }) { Icon(Icons.Default.Check, if (all) "Deselect all" else "Select all") }
-                    TextButton(onClick = { unblockTarget = "__batch__" }) { Text("UNBLOCK", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
-                } else IconButton(onClick = { showChoice = true }) { Icon(Icons.Default.PersonAdd, "Add blocked number") }
+                    IconButton(onClick = { blockedNumbersViewModel.setVisibleSelection(blockedNumbers.toSet(), !all) }) { Icon(Icons.Default.Check, stringResource(if (all) R.string.deselect_all else R.string.select_all)) }
+                    TextButton(onClick = { unblockTarget = "__batch__" }) { Text(stringResource(R.string.unblock), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+                } else IconButton(onClick = { showChoice = true }) { Icon(Icons.Default.PersonAdd, stringResource(R.string.add_blocked_number)) }
             }
         )
     }, bottomBar = {
@@ -96,10 +100,10 @@ fun BlockedNumbersScreen(
             ) {
                 Icon(Icons.Default.PersonAdd, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(16.dp))
-                Text("No blocked numbers", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.no_blocked_numbers), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Numbers you block will appear here.",
+                    stringResource(R.string.blocked_numbers_empty_message),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -132,7 +136,7 @@ fun BlockedNumbersScreen(
     }
     if (showChoice) AlertDialog(
         onDismissRequest = { showChoice = false },
-        title = { Text("Block contact") },
+        title = { Text(stringResource(R.string.block_contact)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
@@ -144,7 +148,7 @@ fun BlockedNumbersScreen(
                     Icon(Icons.Default.Person, contentDescription = null)
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        "Choose from contacts",
+                        stringResource(R.string.choose_from_contacts),
                         modifier = Modifier.weight(1f),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Start
                     )
@@ -158,7 +162,7 @@ fun BlockedNumbersScreen(
                     Icon(Icons.Default.Dialpad, contentDescription = null)
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        "Enter number manually",
+                        stringResource(R.string.enter_number_manually),
                         modifier = Modifier.weight(1f),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Start
                     )
@@ -166,17 +170,17 @@ fun BlockedNumbersScreen(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = { showChoice = false }) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = { showChoice = false }) { Text(stringResource(R.string.cancel)) } }
     )
     if (showPicker) ContactPickerDialog(onDismiss = { showPicker = false }, onContact = { pickerTarget = it })
-    pickerTarget?.let { contact -> AlertDialog(onDismissRequest = { pickerTarget = null }, title = { Text("Block contact?") }, text = { Text("Are you sure you want to block this contact?") },
-        confirmButton = { TextButton(onClick = { pickerTarget = null; showPicker = false; blockedNumbersViewModel.blockNumberAsync(contact.phoneNumber) }) { Text("Block") } }, dismissButton = { TextButton(onClick = { pickerTarget = null }) { Text("Cancel") } }) }
+    pickerTarget?.let { contact -> AlertDialog(onDismissRequest = { pickerTarget = null }, title = { Text(stringResource(R.string.block_contact_question)) }, text = { Text(stringResource(R.string.block_contact_confirmation)) },
+        confirmButton = { TextButton(onClick = { pickerTarget = null; showPicker = false; blockedNumbersViewModel.blockNumberAsync(contact.phoneNumber) }) { Text(stringResource(R.string.block)) } }, dismissButton = { TextButton(onClick = { pickerTarget = null }) { Text(stringResource(R.string.cancel)) } }) }
     unblockTarget?.let { number ->
         val batch = number == "__batch__"
-        AlertDialog(onDismissRequest = { unblockTarget = null }, title = { Text(if (batch) "Unblock contacts?" else "Unblock contact?") },
-            text = { Text(if (batch) "Are you sure you want to unblock the selected contacts?" else "Are you sure you want to unblock this contact?") },
-            confirmButton = { TextButton(onClick = { unblockTarget = null; if (batch) blockedNumbersViewModel.unblockSelected() else blockedNumbersViewModel.unblockNumber(number) }) { Text("Unblock") } },
-            dismissButton = { TextButton(onClick = { unblockTarget = null }) { Text("Cancel") } })
+        AlertDialog(onDismissRequest = { unblockTarget = null }, title = { Text(stringResource(if (batch) R.string.unblock_contacts_question else R.string.unblock_contact_question)) },
+            text = { Text(stringResource(if (batch) R.string.unblock_contacts_confirmation else R.string.unblock_contact_confirmation)) },
+            confirmButton = { TextButton(onClick = { unblockTarget = null; if (batch) blockedNumbersViewModel.unblockSelected() else blockedNumbersViewModel.unblockNumber(number) }) { Text(stringResource(R.string.unblock)) } },
+            dismissButton = { TextButton(onClick = { unblockTarget = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }
 
@@ -186,18 +190,19 @@ private fun AddBlockedNumberDialog(
     onDismiss: () -> Unit,
     onBlock: (String) -> Boolean
 ) {
+    val context = LocalContext.current
     var value by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Block contact") },
+        title = { Text(stringResource(R.string.block_contact)) },
         text = {
             OutlinedTextField(
                 value = value,
                 onValueChange = { value = it; error = null },
                 singleLine = true,
-                label = { Text("Phone number or sender ID") },
-                placeholder = { Text("e.g. +91… or BANK") },
+                label = { Text(stringResource(R.string.phone_number_sender_id)) },
+                placeholder = { Text(stringResource(R.string.phone_number_sender_id_example)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 isError = error != null,
                 supportingText = { error?.let { Text(it) } },
@@ -208,14 +213,14 @@ private fun AddBlockedNumberDialog(
             TextButton(onClick = {
                 val cleaned = value.trim()
                 error = when {
-                    cleaned.isEmpty() -> "Enter a phone number or sender ID"
-                    isBlocked(cleaned) -> "This number or sender is already blocked"
-                    !onBlock(cleaned) -> "Unable to block number or sender"
+                    cleaned.isEmpty() -> context.getString(R.string.enter_phone_number_sender_id)
+                    isBlocked(cleaned) -> context.getString(R.string.number_already_blocked)
+                    !onBlock(cleaned) -> context.getString(R.string.unable_block_number_sender)
                     else -> null
                 }
-            }) { Text("Block") }
+            }) { Text(stringResource(R.string.block)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -241,10 +246,10 @@ private fun BlockedNumberItem(contactName: String, phoneNumber: String, selected
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(if (savedContact) contactName else phoneNumber, fontWeight = FontWeight.SemiBold)
                 if (savedContact) Text(phoneNumber, style = MaterialTheme.typography.bodySmall)
-                Text("Blocked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.blocked), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (selected) Icon(Icons.Default.Check, "Selected", tint = MaterialTheme.colorScheme.primary)
-            else Text("UNBLOCK", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+            if (selected) Icon(Icons.Default.Check, stringResource(R.string.selected), tint = MaterialTheme.colorScheme.primary)
+            else Text(stringResource(R.string.unblock), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
         }
     }
 }
@@ -255,16 +260,16 @@ private fun ContactPickerDialog(onDismiss: () -> Unit, onContact: (com.ap.simple
     val state by vm.uiState.collectAsState()
     var query by remember { mutableStateOf("") }
     val contacts = (state as? ContactUiState.Content)?.contacts.orEmpty().filter { it.name.contains(query, true) || it.phoneNumber.contains(query, true) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Choose contact") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.choose_contact)) }, text = {
         Column(Modifier.heightIn(max = 420.dp)) {
-            OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search contacts") })
+            OutlinedTextField(query, { query = it }, singleLine = true, label = { Text(stringResource(R.string.search_contacts)) })
             Spacer(Modifier.height(8.dp))
             when (state) {
                 ContactUiState.InitialLoading -> CircularProgressIndicator()
-                ContactUiState.Empty -> Text("No contacts available")
-                ContactUiState.Error -> Text("Unable to load contacts")
+                ContactUiState.Empty -> Text(stringResource(R.string.no_contacts_available))
+                ContactUiState.Error -> Text(stringResource(R.string.unable_load_contacts))
                 is ContactUiState.Content -> LazyColumn { items(contacts, key = { it.phoneNumber }) { contact -> ContactCard(contact) { onContact(contact) } } }
             }
         }
-    }, confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }

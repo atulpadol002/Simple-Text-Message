@@ -21,10 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.data.model.ScheduledSms
-import java.text.SimpleDateFormat
+import android.text.format.DateFormat
 import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ScheduledMessageOptionsDialog(
@@ -34,20 +36,19 @@ fun ScheduledMessageOptionsDialog(
     onSendNowClick: () -> Unit,
     onCancelScheduleClick: () -> Unit
 ) {
+    val context = LocalContext.current
 
-    val formattedTime =
-        SimpleDateFormat(
-            "dd MMM yyyy, hh:mm a",
-            Locale.getDefault()
-        ).format(
-            Date(scheduledSms.scheduledTime)
-        )
+    val formattedTime = buildString {
+        append(DateFormat.getMediumDateFormat(context).format(Date(scheduledSms.scheduledTime)))
+        append(", ")
+        append(DateFormat.getTimeFormat(context).format(Date(scheduledSms.scheduledTime)))
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Scheduled message"
+                text = stringResource(R.string.scheduled_message)
             )
         },
         text = {
@@ -109,7 +110,7 @@ fun ScheduledMessageOptionsDialog(
                                 null
                         )
                     },
-                    text = "Edit",
+                    text = stringResource(R.string.edit),
                     onClick = onEditClick
                 )
 
@@ -123,7 +124,7 @@ fun ScheduledMessageOptionsDialog(
                                 null
                         )
                     },
-                    text = "Send now",
+                    text = stringResource(R.string.send_now),
                     onClick =
                         onSendNowClick
                 )
@@ -143,7 +144,7 @@ fun ScheduledMessageOptionsDialog(
                         )
                     },
                     text =
-                        "Cancel schedule",
+                        stringResource(R.string.cancel_schedule),
                     textColor =
                         MaterialTheme
                             .colorScheme
@@ -157,7 +158,7 @@ fun ScheduledMessageOptionsDialog(
             TextButton(
                 onClick = onDismiss
             ) {
-                Text("Close")
+                Text(stringResource(R.string.close))
             }
         }
     )

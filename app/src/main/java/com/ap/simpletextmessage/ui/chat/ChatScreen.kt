@@ -84,6 +84,9 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
+import com.ap.simpletextmessage.R
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
@@ -109,6 +112,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import android.provider.ContactsContract
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
@@ -594,7 +598,7 @@ fun ChatScreen(
                 TopAppBar(
                     navigationIcon = {
                         IconButton(onClick = { selectedMessageIds = emptySet() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close selection")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_selection))
                         }
                     },
                     title = { Text(selectedMessageIds.size.toString()) },
@@ -602,11 +606,11 @@ fun ChatScreen(
                         IconButton(onClick = {
                             val copiedText = selectedMessages.joinToString("\n") { it.body }
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("SMS messages", copiedText))
+                            clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.sms_messages), copiedText))
                             selectedMessageIds = emptySet()
-                            Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.message_copied), Toast.LENGTH_SHORT).show()
                         }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                            Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy))
                         }
                         IconButton(onClick = {
                             chatViewModel.setMessagesStarred(selectedMessages, !allSelectedAreStarred)
@@ -614,11 +618,11 @@ fun ChatScreen(
                         }) {
                             Icon(
                                 if (allSelectedAreStarred) Icons.Outlined.StarOutline else Icons.Default.Star,
-                                contentDescription = if (allSelectedAreStarred) "Unstar" else "Star"
+                                contentDescription = stringResource(if (allSelectedAreStarred) R.string.unstar else R.string.star)
                             )
                         }
                         IconButton(onClick = { showDeleteMessagesDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                         }
                     }
                 )
@@ -630,7 +634,7 @@ fun ChatScreen(
                     ),
                     navigationIcon = {
                         IconButton(onClick = { exitSearchMode() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close search")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_search))
                         }
                     },
                     title = {
@@ -663,7 +667,7 @@ fun ChatScreen(
                                         ) {
                                             if (searchQuery.isEmpty()) {
                                                 Text(
-                                                    "Search messages",
+                                                    stringResource(R.string.search_messages),
                                                     maxLines = 1,
                                                     fontSize = 13.sp,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -675,8 +679,8 @@ fun ChatScreen(
                                 )
                             }
                         Text(
-                            text = if (matchingMessageIds.isEmpty()) "0 of 0"
-                            else "${currentSearchMatchIndex.coerceAtLeast(0) + 1} of ${matchingMessageIds.size}",
+                            text = if (matchingMessageIds.isEmpty()) stringResource(R.string.search_result_empty)
+                            else stringResource(R.string.search_result_position, currentSearchMatchIndex.coerceAtLeast(0) + 1, matchingMessageIds.size),
                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
                             modifier = Modifier.padding(horizontal = 6.dp)
@@ -686,14 +690,14 @@ fun ChatScreen(
                             enabled = matchingMessageIds.isNotEmpty(),
                             onClick = { selectSearchResult(currentSearchMatchIndex - 1) }
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous result")
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.previous_result))
                         }
                         IconButton(
                             modifier = Modifier.size(40.dp),
                             enabled = matchingMessageIds.isNotEmpty(),
                             onClick = { selectSearchResult(currentSearchMatchIndex + 1) }
                         ) {
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next result")
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.next_result))
                         }
                         }
                     }
@@ -708,7 +712,7 @@ fun ChatScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            "Back",
+                            stringResource(R.string.back),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
@@ -743,7 +747,7 @@ fun ChatScreen(
                             if (photo != null) {
                                 Image(
                                     bitmap = photo.asImageBitmap(),
-                                    contentDescription = "Contact photo",
+                                    contentDescription = stringResource(R.string.contact_photo),
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
@@ -813,7 +817,7 @@ fun ChatScreen(
                         ) {
                             Icon(
                                 Icons.Default.Search,
-                                contentDescription = "Search messages",
+                                contentDescription = stringResource(R.string.search_messages),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
@@ -832,7 +836,7 @@ fun ChatScreen(
                                     imageVector =
                                         Icons.Default.MoreVert,
                                     contentDescription =
-                                        "More options",
+                                        stringResource(R.string.more_options),
                                     tint =
                                         MaterialTheme
                                             .colorScheme
@@ -855,7 +859,7 @@ fun ChatScreen(
 
                                         Text(
                                             text =
-                                                "View contact"
+                                                stringResource(R.string.view_contact)
                                         )
                                     },
                                     leadingIcon = {
@@ -892,9 +896,9 @@ fun ChatScreen(
                                                             phoneNumber
                                                         )
                                                 ) {
-                                                    "Already blocked"
+                                                    stringResource(R.string.already_blocked)
                                                 } else {
-                                                    "Add to block list"
+                                                    stringResource(R.string.add_to_block_list)
                                                 }
                                         )
                                     },
@@ -918,7 +922,7 @@ fun ChatScreen(
                                             false
 
                                         chatViewModel.blockNumber(phoneNumber) { blocked ->
-                                            Toast.makeText(context, if (blocked) "Number added to block list" else "Unable to block number", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(if (blocked) R.string.number_added_block_list else R.string.unable_block_number), Toast.LENGTH_SHORT).show()
                                             if (blocked) onBackClick()
                                         }
                                     }
@@ -1142,7 +1146,7 @@ fun ChatScreen(
 
                         Text(
                             text =
-                                "Type message"
+                                stringResource(R.string.type_message)
                         )
                     },
                     singleLine =
@@ -1175,7 +1179,7 @@ fun ChatScreen(
                             Icon(
                                 if (showEmojiPanel) Icons.Default.Keyboard
                                 else Icons.Default.EmojiEmotions,
-                                if (showEmojiPanel) "Show keyboard" else "Open emoji picker"
+                                stringResource(if (showEmojiPanel) R.string.show_keyboard else R.string.open_emoji_picker)
                             )
                         }
                     },
@@ -1191,7 +1195,7 @@ fun ChatScreen(
 
                                     Toast.makeText(
                                         context,
-                                        "Type a message first",
+                                        context.getString(R.string.type_message_first),
                                         Toast.LENGTH_SHORT
                                     ).show()
 
@@ -1213,7 +1217,7 @@ fun ChatScreen(
                                     Icons.Default
                                         .Schedule,
                                 contentDescription =
-                                    "Schedule message"
+                                    stringResource(R.string.schedule_message)
                             )
                         }
                     }
@@ -1263,7 +1267,7 @@ fun ChatScreen(
                                 .Filled
                                 .Send,
                         contentDescription =
-                            "Send",
+                            stringResource(R.string.send),
                         tint =
                             MaterialTheme
                                 .colorScheme
@@ -1303,7 +1307,7 @@ fun ChatScreen(
 
         ScheduledMessageEditorDialog(
             title =
-                "Schedule message",
+                stringResource(R.string.schedule_message),
             contactName =
                 contactName,
             phoneNumber =
@@ -1314,7 +1318,7 @@ fun ChatScreen(
                 System.currentTimeMillis() +
                         60_000L,
             confirmButtonText =
-                "Schedule",
+                stringResource(R.string.schedule),
             allowMessageEditing = false,
             onDismiss = {
 
@@ -1346,7 +1350,7 @@ fun ChatScreen(
 
                     Toast.makeText(
                         context,
-                        "Message scheduled",
+                        context.getString(R.string.message_scheduled),
                         Toast.LENGTH_SHORT
                     ).show()
 
@@ -1354,7 +1358,7 @@ fun ChatScreen(
 
                     Toast.makeText(
                         context,
-                        "Enter message and select a future time",
+                        context.getString(R.string.enter_message_future_time),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -1370,7 +1374,7 @@ fun ChatScreen(
                 if (settingsIntent == null) {
                     Toast.makeText(
                         context,
-                        "Unable to open Alarms & reminders settings",
+                        context.getString(R.string.unable_open_alarm_settings),
                         Toast.LENGTH_LONG
                     ).show()
                 } else {
@@ -1382,7 +1386,7 @@ fun ChatScreen(
                         pendingScheduleRequest = false
                         Toast.makeText(
                             context,
-                            "Unable to open Alarms & reminders settings",
+                            context.getString(R.string.unable_open_alarm_settings),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -1397,13 +1401,13 @@ fun ChatScreen(
             onDismissRequest = {
                 if (!isDeletingMessages) showDeleteMessagesDialog = false
             },
-            title = { Text("Delete") },
+            title = { Text(stringResource(R.string.delete)) },
             text = {
                 Text(
                     if (selectedMessageIds.size == 1) {
-                        "Are you sure you want to delete this message?"
+                        stringResource(R.string.delete_message_question)
                     } else {
-                        "Are you sure you want to delete these messages?"
+                        stringResource(R.string.delete_messages_question)
                     }
                 )
             },
@@ -1419,20 +1423,20 @@ fun ChatScreen(
                                     showDeleteMessagesDialog = false
                                     selectedMessageIds = emptySet()
                                 } else {
-                                    Toast.makeText(context, "Unable to delete message", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.unable_delete_message), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(
                     enabled = !isDeletingMessages,
                     onClick = { showDeleteMessagesDialog = false }
-                ) { Text("Cancel") }
+                ) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -1469,7 +1473,7 @@ fun ChatScreen(
 
                         Toast.makeText(
                             context,
-                            "Scheduled time has already passed",
+                            context.getString(R.string.scheduled_time_passed),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -1488,9 +1492,9 @@ fun ChatScreen(
                     Toast.makeText(
                         context,
                         if (started) {
-                            "Sending SMS now"
+                            context.getString(R.string.sending_sms_now)
                         } else {
-                            "Unable to send SMS"
+                            context.getString(R.string.unable_send_sms)
                         },
                         Toast.LENGTH_SHORT
                     ).show()
@@ -1507,7 +1511,7 @@ fun ChatScreen(
 
                     Toast.makeText(
                         context,
-                        "Scheduled message cancelled",
+                        context.getString(R.string.scheduled_message_cancelled),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -1520,7 +1524,7 @@ fun ChatScreen(
 
             ScheduledMessageEditorDialog(
                 title =
-                    "Edit scheduled message",
+                    stringResource(R.string.edit_scheduled_message),
                 contactName =
                     scheduledSms.contactName
                         .ifBlank {
@@ -1532,7 +1536,7 @@ fun ChatScreen(
                 initialScheduledTime =
                     scheduledSms.scheduledTime,
                 confirmButtonText =
-                    "Save changes",
+                    stringResource(R.string.save_changes),
                 onDismiss = {
 
                     chatViewModel
@@ -1550,7 +1554,7 @@ fun ChatScreen(
 
                         Toast.makeText(
                             context,
-                            "Schedule cancelled because its time passed while editing",
+                            context.getString(R.string.schedule_cancelled_while_editing),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -1577,7 +1581,7 @@ fun ChatScreen(
 
                         Toast.makeText(
                             context,
-                            "Scheduled message updated",
+                            context.getString(R.string.scheduled_message_updated),
                             Toast.LENGTH_SHORT
                         ).show()
 
@@ -1585,7 +1589,7 @@ fun ChatScreen(
 
                         Toast.makeText(
                             context,
-                            "Enter message and select a future time",
+                            context.getString(R.string.enter_message_future_time),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -1616,7 +1620,7 @@ private fun ReadOnlyReplyFooter() {
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "Replies aren’t supported for this sender",
+                text = stringResource(R.string.replies_not_supported),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1656,7 +1660,7 @@ private fun ScheduledSectionHeader() {
                     horizontal = 12.dp
                 ),
             text =
-                "Scheduled",
+                stringResource(R.string.scheduled),
             style =
                 MaterialTheme
                     .typography
@@ -1743,6 +1747,7 @@ private fun timestampToLocalDate(
         .toLocalDate()
 }
 
+@Composable
 private fun formatDateLabel(
     date: LocalDate
 ): String {
@@ -1756,17 +1761,15 @@ private fun formatDateLabel(
     return when (date) {
 
         today ->
-            "Today"
+            stringResource(R.string.today)
 
         yesterday ->
-            "Yesterday"
+            stringResource(R.string.yesterday)
 
         else ->
             date.format(
-                DateTimeFormatter
-                    .ofPattern(
-                        "dd MMM yyyy"
-                    )
+                DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+                    .withLocale(LocalConfiguration.current.locales[0])
             )
     }
 }
@@ -1819,7 +1822,7 @@ private suspend fun openContact(
 
         Toast.makeText(
             context,
-            "Unable to open contact",
+            context.getString(R.string.unable_open_contact),
             Toast.LENGTH_SHORT
         ).show()
     }

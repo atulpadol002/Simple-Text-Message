@@ -62,6 +62,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.premium.LegalLinks
 import com.ap.simpletextmessage.premium.PremiumBillingManager
@@ -156,12 +157,12 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                 IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.back),
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
                 Text(
-                    text = "Go Premium",
+                    text = stringResource(R.string.go_premium),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -177,13 +178,13 @@ fun PaywallScreen(onBackClick: () -> Unit) {
             ) {
                 Image(
                     painter = painterResource(R.drawable.paywall_icon),
-                    contentDescription = "Premium",
+                    contentDescription = stringResource(R.string.premium),
                     modifier = Modifier.size(width = 176.dp, height = 118.dp),
                     contentScale = ContentScale.Fit
                 )
 
                 Text(
-                    text = "Go Premium",
+                    text = stringResource(R.string.go_premium),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -191,7 +192,7 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Enjoy a clean, ad-free messaging experience.",
+                    text = stringResource(R.string.enjoy_ad_free),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -212,11 +213,11 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PremiumGreen)
                     ) {
-                        Text("Manage Subscription", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.manage_subscription), fontWeight = FontWeight.SemiBold)
                     }
                 } else {
                     Text(
-                        text = "Choose your plan",
+                        text = stringResource(R.string.choose_plan),
                         modifier = Modifier.fillMaxWidth(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
@@ -228,7 +229,7 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                         plan = billingState.monthly,
                         selected = selectedPlan == PremiumPlan.MONTHLY,
                         recommended = false,
-                        supportingText = "Flexible monthly plan",
+                        supportingText = stringResource(R.string.flexible_monthly_plan),
                         onSelect = { selectedPlanName = PremiumPlan.MONTHLY.name }
                     )
                     Spacer(Modifier.height(12.dp))
@@ -236,7 +237,7 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                         plan = billingState.yearly,
                         selected = selectedPlan == PremiumPlan.YEARLY,
                         recommended = true,
-                        supportingText = "One annual payment",
+                        supportingText = stringResource(R.string.one_annual_payment),
                         onSelect = { selectedPlanName = PremiumPlan.YEARLY.name }
                     )
                     Spacer(Modifier.height(18.dp))
@@ -265,7 +266,7 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                             )
                         } else {
                             Text(
-                                text = "Continue with ${selectedPlan.displayName}",
+                                text = stringResource(R.string.continue_with_plan, stringResource(selectedPlan.displayNameRes)),
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -288,7 +289,7 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                         tint = PremiumGreen
                     )
                     Spacer(Modifier.size(8.dp))
-                    Text("Restore Purchase", color = PremiumGreen, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.restore_purchase), color = PremiumGreen, fontWeight = FontWeight.SemiBold)
                 }
 
                 Row(
@@ -297,11 +298,11 @@ fun PaywallScreen(onBackClick: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = { LegalLinks.openTermsAndConditions(context) }) {
-                        Text("Terms", color = PremiumMuted)
+                        Text(stringResource(R.string.terms), color = PremiumMuted)
                     }
                     Text("•", color = PremiumMuted)
                     TextButton(onClick = { LegalLinks.openPrivacyPolicy(context) }) {
-                        Text("Privacy Policy", color = PremiumMuted)
+                        Text(stringResource(R.string.privacy_policy), color = PremiumMuted)
                     }
                 }
             }
@@ -337,14 +338,14 @@ private fun NoAdsBenefitCard() {
             }
             Column(modifier = Modifier.padding(start = 14.dp)) {
                 Text(
-                    text = "Remove All Ads",
+                    text = stringResource(R.string.remove_all_ads),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = PremiumInk
                 )
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    text = "No banners, native, interstitial, rewarded or app-open ads for an active No Ads subscriber where applicable.",
+                    text = stringResource(R.string.remove_ads_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = PremiumMuted
                 )
@@ -372,13 +373,13 @@ private fun ActiveSubscriptionCard() {
             )
             Column(modifier = Modifier.padding(start = 12.dp)) {
                 Text(
-                    text = "No Ads is active",
+                    text = stringResource(R.string.no_ads_active),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = PremiumGreenDark
                 )
                 Text(
-                    text = "Your active subscription keeps messaging ad-free.",
+                    text = stringResource(R.string.active_subscription_ad_free),
                     style = MaterialTheme.typography.bodyMedium,
                     color = PremiumMuted
                 )
@@ -431,7 +432,7 @@ private fun SubscriptionPlanCard(
                             color = PremiumGreen
                         ) {
                             Text(
-                                text = "Best Value",
+                                text = stringResource(R.string.best_value),
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -442,7 +443,7 @@ private fun SubscriptionPlanCard(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = if (plan.available) supportingText else "Unavailable from Google Play",
+                    text = if (plan.available) supportingText else stringResource(R.string.unavailable_google_play),
                     style = MaterialTheme.typography.bodySmall,
                     color = PremiumMuted
                 )

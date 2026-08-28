@@ -9,6 +9,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 
 @Composable
 fun ExactAlarmPermissionDialog(
@@ -17,20 +19,20 @@ fun ExactAlarmPermissionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Allow scheduled messages") },
+        title = { Text(stringResource(R.string.allow_scheduled_messages)) },
         text = {
             Text(
-                "To send scheduled messages at the time you choose, allow Simple Text Message to set alarms and reminders."
+                stringResource(R.string.allow_scheduled_messages_explanation)
             )
         },
         confirmButton = {
             TextButton(onClick = onContinue) {
-                Text("Continue")
+                Text(stringResource(R.string.continue_action))
             }
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

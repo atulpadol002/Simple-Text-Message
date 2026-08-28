@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,12 +33,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import androidx.compose.ui.unit.sp
 import com.ap.simpletextmessage.data.model.SmsConversation
 import com.ap.simpletextmessage.utils.AvatarColorResolver
-import java.text.SimpleDateFormat
+import android.text.format.DateFormat
 import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ConversationCard(
@@ -49,13 +51,9 @@ fun ConversationCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val formattedTime = remember(conversation.date) {
-        SimpleDateFormat(
-            "hh:mm a",
-            Locale.getDefault()
-        ).format(
-            Date(conversation.date)
-        )
+    val context = LocalContext.current
+    val formattedTime = remember(conversation.date, context.resources.configuration.locales) {
+        DateFormat.getTimeFormat(context).format(Date(conversation.date))
     }
 
     val firstLetter = displayName.firstOrNull { it.isLetterOrDigit() }
@@ -95,12 +93,12 @@ fun ConversationCard(
                 if (selected) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.selected),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 } else {
                     if (contactPhoto != null) {
-                        Image(contactPhoto, "Contact photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        Image(contactPhoto, stringResource(R.string.contact_photo), Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     } else {
                         Text(
                             text = firstLetter,
@@ -172,7 +170,7 @@ fun ConversationCard(
                     Spacer(modifier = Modifier.height(3.dp))
                     Icon(
                         imageVector = Icons.Default.PushPin,
-                        contentDescription = "Pinned",
+                        contentDescription = stringResource(R.string.pinned),
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

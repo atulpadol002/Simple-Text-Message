@@ -2,6 +2,8 @@ package com.ap.simpletextmessage.premium
 
 import android.app.Activity
 import android.content.Context
+import androidx.annotation.StringRes
+import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.ads.AdRuntime
 import com.ap.simpletextmessage.ads.FullScreenAdCoordinator
 import com.ap.simpletextmessage.ads.FullScreenAdType
@@ -63,6 +65,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
     val adsAllowed: StateFlow<Boolean> = _adsAllowed.asStateFlow()
 
     private var initialized = false
+    private lateinit var appContext: Context
     private var connecting = false
     private lateinit var billingClient: BillingClient
     private val connectionWaiters = mutableListOf<(Boolean) -> Unit>()
@@ -72,7 +75,8 @@ object PremiumBillingManager : PurchasesUpdatedListener {
     fun initialize(context: Context) {
         if (initialized) return
         initialized = true
-        billingClient = BillingClient.newBuilder(context.applicationContext)
+        appContext = context.applicationContext
+        billingClient = BillingClient.newBuilder(appContext)
             .setListener(this)
             .enablePendingPurchases(
                 PendingPurchasesParams.newBuilder()
@@ -93,7 +97,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
         setEntitlement(PremiumEntitlementStatus.CHECKING, null)
         withReady { ready ->
             if (!ready) {
-                setEntitlement(PremiumEntitlementStatus.ERROR, "Google Play Billing is unavailable.")
+                setEntitlement(PremiumEntitlementStatus.ERROR, text(R.string.billing_unavailable))
                 onComplete()
             } else {
                 queryProductDetails()
@@ -105,9 +109,9 @@ object PremiumBillingManager : PurchasesUpdatedListener {
     fun restorePurchases() {
         refreshPurchases {
             val message = when (_state.value.entitlementStatus) {
-                PremiumEntitlementStatus.ACTIVE -> "Purchase restored."
-                PremiumEntitlementStatus.PENDING -> "Purchase is pending."
-                PremiumEntitlementStatus.INACTIVE -> "No active subscription was found."
+                PremiumEntitlementStatus.ACTIVE -> text(R.string.purchase_restored)
+                PremiumEntitlementStatus.PENDING -> text(R.string.purchase_pending)
+                PremiumEntitlementStatus.INACTIVE -> text(R.string.no_active_subscription)
                 PremiumEntitlementStatus.ERROR -> _state.value.message
                 PremiumEntitlementStatus.CHECKING -> null
             }
@@ -118,7 +122,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
     fun refreshProductDetails() {
         withReady { ready ->
             if (ready) queryProductDetails()
-            else _state.value = _state.value.copy(message = "Google Play Billing is unavailable.")
+            else _state.value = _state.value.copy(message = text(R.string.billing_unavailable))
         }
     }
 
@@ -127,17 +131,20 @@ object PremiumBillingManager : PurchasesUpdatedListener {
         val option = purchaseOptions[plan]
         if (option == null) {
             _state.value = _state.value.copy(
-                message = "${plan.displayName} is not available from Google Play."
+                message = text(
+                    R.string.plan_unavailable,
+                    text(plan.displayNameRes)
+                )
             )
             refreshProductDetails()
             return
         }
         if (!billingClient.isReady) {
-            _state.value = _state.value.copy(message = "Google Play Billing is unavailable.")
+            _state.value = _state.value.copy(message = text(R.string.billing_unavailable))
             return
         }
         if (!FullScreenAdCoordinator.tryAcquire(FullScreenAdType.BILLING)) {
-            _state.value = _state.value.copy(message = "Another full-screen action is in progress.")
+            _state.value = _state.value.copy(message = text(R.string.fullscreen_action_in_progress))
             return
         }
 
@@ -161,7 +168,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
             } else {
                 setEntitlement(
                     PremiumEntitlementStatus.ERROR,
-                    billingErrorMessage("Unable to start purchase", result)
+                    billingErrorMessage(R.string.unable_start_purchase, result)
                 )
             }
         }
@@ -180,7 +187,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
             BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> refreshPurchases()
             else -> setEntitlement(
                 PremiumEntitlementStatus.ERROR,
-                billingErrorMessage("Purchase failed", result)
+                billingErrorMessage(R.string.purchase_failed, result)
             )
         }
     }
@@ -196,7 +203,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
             } else {
                 setEntitlement(
                     PremiumEntitlementStatus.ERROR,
-                    billingErrorMessage("Unable to restore purchases", result)
+                    billingErrorMessage(R.string.unable_restore_purchases, result)
                 )
             }
             onComplete()
@@ -221,7 +228,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
             activePurchase != null -> setEntitlement(PremiumEntitlementStatus.ACTIVE, null)
             pendingPurchase != null -> setEntitlement(
                 PremiumEntitlementStatus.PENDING,
-                "Your purchase is pending. No Ads will activate after Google Play completes it."
+                text(R.string.pending_purchase_message)
             )
             else -> setEntitlement(PremiumEntitlementStatus.INACTIVE, null)
         }
@@ -235,7 +242,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
         ) { result ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
                 _state.value = _state.value.copy(
-                    message = billingErrorMessage("Purchase acknowledgement failed", result)
+                    message = billingErrorMessage(R.string.purchase_acknowledgement_failed, result)
                 )
             }
         }
@@ -253,7 +260,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
         ) { result, queryResult ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
                 purchaseOptions.clear()
-                updatePlanUi(message = billingErrorMessage("Unable to load prices", result))
+                updatePlanUi(message = billingErrorMessage(R.string.unable_load_prices, result))
                 return@queryProductDetailsAsync
             }
             val details = queryResult.productDetailsList.firstOrNull { item ->
@@ -274,7 +281,10 @@ object PremiumBillingManager : PurchasesUpdatedListener {
             val missing = PremiumPlan.entries.filterNot(purchaseOptions::containsKey)
             updatePlanUi(
                 message = if (missing.isEmpty()) null else {
-                    "Google Play is missing: ${missing.joinToString { it.displayName }}."
+                    text(
+                        R.string.google_play_missing,
+                        missing.joinToString { text(it.displayNameRes) }
+                    )
                 }
             )
         }
@@ -322,7 +332,7 @@ object PremiumBillingManager : PurchasesUpdatedListener {
                 if (!ready) {
                     setEntitlement(
                         PremiumEntitlementStatus.ERROR,
-                        billingErrorMessage("Google Play Billing setup failed", result)
+                        billingErrorMessage(R.string.billing_setup_failed, result)
                     )
                 }
                 val waiters = synchronized(this@PremiumBillingManager) {
@@ -337,12 +347,20 @@ object PremiumBillingManager : PurchasesUpdatedListener {
                 _state.value = _state.value.copy(billingReady = false)
                 setEntitlement(
                     PremiumEntitlementStatus.ERROR,
-                    "Google Play Billing disconnected."
+                    text(R.string.billing_disconnected)
                 )
             }
         })
     }
 
-    private fun billingErrorMessage(prefix: String, result: BillingResult): String =
-        "$prefix (${result.responseCode}): ${result.debugMessage}"
+    private fun billingErrorMessage(@StringRes prefixRes: Int, result: BillingResult): String =
+        text(
+            R.string.billing_error_format,
+            text(prefixRes),
+            result.responseCode,
+            result.debugMessage
+        )
+
+    private fun text(@StringRes resource: Int, vararg arguments: Any): String =
+        appContext.getString(resource, *arguments)
 }

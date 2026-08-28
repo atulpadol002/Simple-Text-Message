@@ -19,6 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 
 @Composable
 fun OnboardingConsentProgressOverlay() {
@@ -46,7 +48,7 @@ fun OnboardingConsentProgressOverlay() {
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
                 Spacer(modifier = Modifier.size(16.dp))
-                Text("Checking privacy choices...")
+                Text(stringResource(R.string.checking_privacy_choices))
             }
         }
     }

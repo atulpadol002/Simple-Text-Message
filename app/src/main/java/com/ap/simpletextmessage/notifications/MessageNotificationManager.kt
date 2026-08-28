@@ -95,9 +95,9 @@ object MessageNotificationManager {
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
-            CHANNEL_ID, "Incoming messages", NotificationManager.IMPORTANCE_HIGH
+            CHANNEL_ID, context.getString(R.string.incoming_messages_channel), NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Notifications for incoming SMS messages"
+            description = context.getString(R.string.incoming_messages_channel_description)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 250, 150, 250)

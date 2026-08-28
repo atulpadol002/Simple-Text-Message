@@ -255,6 +255,31 @@ class MainActivity : AppCompatActivity() {
             !showSmsSettingsPrompt && !showContactsSettingsPrompt && !showNotificationSettingsPrompt &&
             pendingChatDestination.value == null
 
+    /**
+     * The two onboarding native placements need consent before the default-SMS flow is complete.
+     * Full-screen ad opportunities remain gated by [isAdPresentationSafe].
+     */
+    fun requestOnboardingNativeAdsConsent() {
+        val config = com.ap.simpletextmessage.ads.AdRemoteConfigManager.config.value
+        val onboardingNativeEnabled = config.masterEnabled &&
+            (config.onboardingGetStartedNative.enabled || config.defaultSmsNative.enabled)
+        if (!onboardingNativeEnabled || !AdRuntime.areAdsAllowed()) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+            isFinishing || isDestroyed ||
+            FullScreenAdCoordinator.activeType() != null
+        ) return
+
+        when (onboardingConsentStage) {
+            OnboardingConsentStage.NOT_STARTED -> {
+                onboardingConsentStage = OnboardingConsentStage.UMP
+                AdDebug.log { "ConsentStartup umpLaunch=true reason=onboarding_native" }
+                AdRuntime.gatherConsent(this, ::onOnboardingConsentComplete)
+            }
+            OnboardingConsentStage.UMP,
+            OnboardingConsentStage.COMPLETE -> Unit
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         AutoInterstitialManager.onForeground()
@@ -302,8 +327,10 @@ class MainActivity : AppCompatActivity() {
                 AdRuntime.gatherConsent(this)
             }
         } else {
-            AdDebug.log { "Consent not gathered; MobileAds initialization and ad requests remain blocked" }
-            AdDebug.log { "ConsentStartup blockedReason=activity_not_safe" }
+            requestOnboardingNativeAdsConsent()
+            AdDebug.log {
+                "Full-screen onboarding ads remain blocked until permission flow is complete"
+            }
         }
 
         if (returnedFromBackground && onboardingOpportunityWasConsumed) {

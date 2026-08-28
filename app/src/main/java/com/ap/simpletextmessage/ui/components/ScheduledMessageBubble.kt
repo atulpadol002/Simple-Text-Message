@@ -21,11 +21,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.ap.simpletextmessage.R
 import com.ap.simpletextmessage.data.model.ScheduledSms
 import com.ap.simpletextmessage.data.model.ScheduledSmsStatus
-import java.text.SimpleDateFormat
+import android.text.format.DateFormat
 import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -33,14 +35,13 @@ fun ScheduledMessageBubble(
     scheduledSms: ScheduledSms,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
 
-    val formattedTime =
-        SimpleDateFormat(
-            "dd MMM yyyy • hh:mm a",
-            Locale.getDefault()
-        ).format(
-            Date(scheduledSms.scheduledTime)
-        )
+    val formattedTime = buildString {
+        append(DateFormat.getMediumDateFormat(context).format(Date(scheduledSms.scheduledTime)))
+        append(" • ")
+        append(DateFormat.getTimeFormat(context).format(Date(scheduledSms.scheduledTime)))
+    }
 
     Column(
         modifier = Modifier
@@ -87,10 +88,10 @@ fun ScheduledMessageBubble(
 
                     Text(
                         text = when (scheduledSms.status) {
-                            ScheduledSmsStatus.SCHEDULED -> " Scheduled"
-                            ScheduledSmsStatus.SENDING -> " Sending"
-                            ScheduledSmsStatus.SENT -> " Sent"
-                            ScheduledSmsStatus.FAILED -> " Failed"
+                            ScheduledSmsStatus.SCHEDULED -> stringResource(R.string.scheduled)
+                            ScheduledSmsStatus.SENDING -> stringResource(R.string.sending)
+                            ScheduledSmsStatus.SENT -> stringResource(R.string.sent)
+                            ScheduledSmsStatus.FAILED -> stringResource(R.string.failed)
                         },
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary

@@ -30,13 +30,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +49,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.ap.simpletextmessage.R
+import com.ap.simpletextmessage.ads.AdPlacement
+import com.ap.simpletextmessage.ads.AdRemoteConfigManager
+import com.ap.simpletextmessage.ads.AdType
+import com.ap.simpletextmessage.ads.AdTypePlacement
+import com.ap.simpletextmessage.ads.NativeAdCard
 import com.ap.simpletextmessage.sms.DefaultSmsManager
 
 @Composable
@@ -52,6 +62,18 @@ fun SplashScreen(
     onDirectHome: () -> Unit
 ) {
     val context = LocalContext.current
+    val localizedTagline = stringResource(R.string.brand_tagline)
+    val adConfig by AdRemoteConfigManager.config.collectAsState()
+    val adTypeConfig by AdRemoteConfigManager.adTypeConfig.collectAsState()
+    val getStartedNativeEnabled = adConfig.onboardingGetStartedNative.enabled &&
+        adTypeConfig.allows(AdTypePlacement.ONBOARDING_GET_STARTED, AdType.NATIVE)
+    var getStartedNativeVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(getStartedNativeEnabled, adConfig.masterEnabled) {
+        if (!getStartedNativeEnabled || !adConfig.masterEnabled) {
+            getStartedNativeVisible = false
+        }
+    }
 
     val isDefaultSmsApp = remember(context) {
         DefaultSmsManager(context).isDefaultSmsApp()
@@ -75,7 +97,9 @@ fun SplashScreen(
                     .navigationBarsPadding()
             ) {
                 val compactHeight = maxHeight < 620.dp
-                val requiresScrolling = maxHeight < 660.dp || LocalDensity.current.fontScale > 1.2f
+                val requiresScrolling = maxHeight < 660.dp ||
+                    LocalDensity.current.fontScale > 1.2f ||
+                    (getStartedNativeVisible && maxHeight < 760.dp)
                 val logoSize = when {
                     maxHeight >= 760.dp -> 124.dp
                     compactHeight -> 104.dp
@@ -102,7 +126,7 @@ fun SplashScreen(
 
                     Image(
                         painter = painterResource(R.drawable.simple_text_message_app_icon),
-                        contentDescription = "Simple Text Message logo",
+                        contentDescription = stringResource(R.string.app_logo_description),
                         modifier = Modifier.size(logoSize),
                         contentScale = ContentScale.Fit
                     )
@@ -110,7 +134,7 @@ fun SplashScreen(
                     Spacer(modifier = Modifier.height(if (compactHeight) 16.dp else 22.dp))
 
                     Text(
-                        text = "Simple Text Message",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -121,15 +145,11 @@ fun SplashScreen(
 
                     Text(
                         text = buildAnnotatedString {
-                            append("Fast ")
-                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                append("•")
+                            localizedTagline.forEach { character ->
+                                if (character == '•') {
+                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(character) }
+                                } else append(character)
                             }
-                            append(" Secure ")
-                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                append("•")
-                            }
-                            append(" Reliable")
                         },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -137,7 +157,22 @@ fun SplashScreen(
                     )
 
                     if (requiresScrolling) {
-                        Spacer(modifier = Modifier.height(if (compactHeight) 20.dp else 32.dp))
+                        Spacer(modifier = Modifier.height(if (compactHeight) 12.dp else 20.dp))
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+
+                    NativeAdCard(
+                        placement = AdPlacement.ONBOARDING_GET_STARTED_NATIVE,
+                        enabled = getStartedNativeEnabled,
+                        maxPerSession = adConfig.onboardingGetStartedNative.maxPerSession,
+                        modifier = Modifier.widthIn(max = 380.dp),
+                        cacheKey = "onboarding_get_started_native",
+                        onVisibilityChanged = { getStartedNativeVisible = it }
+                    )
+
+                    if (requiresScrolling) {
+                        Spacer(modifier = Modifier.height(if (compactHeight) 12.dp else 20.dp))
                     } else {
                         Spacer(modifier = Modifier.weight(1f))
                     }
@@ -172,7 +207,7 @@ fun SplashScreen(
                             }
 
                             Text(
-                                text = "Your messages are always private and secure.",
+                                text = stringResource(R.string.messages_private_secure),
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -195,7 +230,7 @@ fun SplashScreen(
                         )
                     ) {
                         Text(
-                            text = "Get Started",
+                            text = stringResource(R.string.get_started),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(modifier = Modifier.size(10.dp))

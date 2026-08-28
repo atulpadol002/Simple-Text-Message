@@ -46,6 +46,8 @@ data class AdConfig(
     val serviceChatNative: CappedConfig = CappedConfig(),
     val newMessageNative: CappedConfig = CappedConfig(),
     val languageNative: CappedConfig = CappedConfig(),
+    val onboardingGetStartedNative: CappedConfig = CappedConfig(),
+    val defaultSmsNative: CappedConfig = CappedConfig(),
     val blockedBanner: ToggleConfig = ToggleConfig(),
     val starredBanner: ToggleConfig = ToggleConfig(),
     val interstitial: InterstitialConfig = InterstitialConfig(),
@@ -78,6 +80,8 @@ data class AdConfig(
             serviceChatNative = CappedConfig(enabled = true, maxPerSession = 50),
             newMessageNative = CappedConfig(enabled = true, maxPerSession = 10),
             languageNative = CappedConfig(enabled = true, maxPerSession = 10),
+            onboardingGetStartedNative = CappedConfig(enabled = true, maxPerSession = 10),
+            defaultSmsNative = CappedConfig(enabled = true, maxPerSession = 10),
             blockedBanner = ToggleConfig(enabled = true),
             starredBanner = ToggleConfig(enabled = true),
             interstitial = InterstitialConfig(
@@ -134,6 +138,14 @@ data class AdConfig(
                 serviceChatNative = root.optionalCapped("serviceChatNative"),
                 newMessageNative = root.optionalCapped("newMessageNative"),
                 languageNative = root.optionalCapped("languageNative"),
+                onboardingGetStartedNative = root.optionalCapped(
+                    "onboardingGetStartedNative",
+                    Defaults.onboardingGetStartedNative
+                ),
+                defaultSmsNative = root.optionalCapped(
+                    "defaultSmsNative",
+                    Defaults.defaultSmsNative
+                ),
                 blockedBanner = root.requiredToggle("blockedBanner"),
                 starredBanner = root.requiredToggle("starredBanner"),
                 interstitial = InterstitialConfig(
@@ -179,12 +191,15 @@ private fun JSONObject.requiredToggle(name: String) =
 private fun JSONObject.optionalToggle(name: String): ToggleConfig =
     optJSONObject(name)?.let { ToggleConfig(it.optBoolean("enabled", false)) } ?: ToggleConfig()
 
-private fun JSONObject.optionalCapped(name: String): CappedConfig {
-    val value = optJSONObject(name) ?: return CappedConfig()
-    val maxPerSession = value.optInt("maxPerSession", 0)
+private fun JSONObject.optionalCapped(
+    name: String,
+    fallback: CappedConfig = CappedConfig()
+): CappedConfig {
+    val value = optJSONObject(name) ?: return fallback
+    val maxPerSession = value.optInt("maxPerSession", fallback.maxPerSession)
     return CappedConfig(
-        enabled = value.optBoolean("enabled", false),
-        maxPerSession = maxPerSession.takeIf { it >= 0 } ?: 0
+        enabled = value.optBoolean("enabled", fallback.enabled),
+        maxPerSession = maxPerSession.takeIf { it >= 0 } ?: fallback.maxPerSession
     )
 }
 
