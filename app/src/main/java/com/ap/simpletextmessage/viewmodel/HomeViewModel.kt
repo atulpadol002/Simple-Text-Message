@@ -33,8 +33,7 @@ class HomeViewModel(
 
     private data class LoadResult(
         val conversations: List<SmsConversation>,
-        val pinnedIds: Set<Long>,
-        val presentations: Map<Long, ContactPresentation>
+        val pinnedIds: Set<Long>
     )
 
     private data class CachedHome(
@@ -107,6 +106,7 @@ class HomeViewModel(
 
     private var loadJob:
             Job? = null
+    private var presentationJob: Job? = null
 
     private var reloadPending = false
     private var hasCompletedInitialLoad = cachedHomeRaw != null
@@ -181,12 +181,13 @@ class HomeViewModel(
     fun loadConversations() {
 
         applyCachedPresentations()
-        val generation = ++loadGeneration
 
         if (loadJob?.isActive == true) {
             reloadPending = true
             return
         }
+
+        val generation = ++loadGeneration
 
         val showInitialLoading =
             _conversations.value.isEmpty() && !hasCompletedInitialLoad
@@ -200,76 +201,49 @@ class HomeViewModel(
 
             try {
 
+                val archivedThreadIds = withContext(Dispatchers.IO) {
+                    archivePreferences.getArchivedThreadIds()
+                }
+                val pinnedIds = withContext(Dispatchers.IO) {
+                    pinnedPreferences.getPinnedThreadIds()
+                }
+
+                if (showInitialLoading) {
+                    val preview = withContext(Dispatchers.IO) {
+                        buildLoadResult(
+                            providerConversations = smsRepository.getRecentConversations(
+                                INITIAL_PREVIEW_ROW_LIMIT
+                            ),
+                            archivedThreadIds = archivedThreadIds,
+                            pinnedIds = pinnedIds
+                        )
+                    }
+
+                    if (loadVersion == stateVersion && generation == loadGeneration) {
+                        publishLoadResult(preview)
+                        // The newest conversations are usable now. Keep the accurate full scan
+                        // running below without holding the Home screen behind a loader.
+                        _isLoading.value = false
+                    }
+                }
+
                 val result =
                     withContext(
                         Dispatchers.IO
                     ) {
-
-                        val archivedThreadIds =
-                            archivePreferences
-                                .getArchivedThreadIds()
-
                         val providerConversations = smsRepository.getConversations()
                         val validThreadIds = providerConversations.map { it.threadId }.toSet()
-                        val pinnedIds = pinnedPreferences.getPinnedThreadIds()
                         pinnedPreferences.removePinnedThreadIds(pinnedIds - validThreadIds)
-
-                        val conversations = providerConversations
-                            .filterNot {
-                                    conversation ->
-
-                                val isArchived =
-                                    archivedThreadIds
-                                        .contains(
-                                            conversation
-                                                .threadId
-                                        )
-
-                                val isBlocked =
-                                    blockedNumbersPreferences
-                                        .isNumberBlocked(
-                                            conversation
-                                                .address
-                                        )
-
-                                isArchived ||
-                                        isBlocked
-                            }
-                            .sortedWith(
-                                compareByDescending<SmsConversation> { it.threadId in pinnedIds }
-                                    .thenByDescending { it.date }
-                            )
-
-                        // Resolve each cache miss as part of the IO load. The first visible Home
-                        // state therefore already has contact names, while subsequent reloads use
-                        // the process cache and do not scan contacts during recomposition.
-                        val cachedPresentations = conversations.associate { conversation ->
-                            conversation.threadId to (
-                                contactResolver.getCached(conversation.address)
-                                    ?: contactResolver.resolve(conversation.address)
-                                )
-                        }
-                        LoadResult(
-                            conversations,
-                            pinnedIds intersect validThreadIds,
-                            cachedPresentations
+                        buildLoadResult(
+                            providerConversations = providerConversations,
+                            archivedThreadIds = archivedThreadIds,
+                            pinnedIds = pinnedIds intersect validThreadIds
                         )
                     }
 
                 if (loadVersion == stateVersion && generation == loadGeneration) {
-                    val previousRows = _conversations.value.associateBy { it.threadId }
-                    val preservedPresentations = result.conversations.mapNotNull { conversation ->
-                        val previous = previousRows[conversation.threadId]
-                        _contactPresentations.value[conversation.threadId]
-                            ?.takeIf { previous?.address == conversation.address }
-                            ?.let { conversation.threadId to it }
-                    }.toMap()
-                    val mergedPresentations = preservedPresentations + result.presentations
-                    _conversations.value = result.conversations
-                    _contactNames.value = mergedPresentations.mapValues { it.value.displayName }
-                    _pinnedThreadIds.value = result.pinnedIds
-                    _contactPresentations.value = mergedPresentations
-                    persistVisibleState()
+                    publishLoadResult(result)
+                    resolvePresentationsInBackground(result.conversations, generation)
                     if (scrollAfterReload && !reloadPending) {
                         scrollAfterReload = false
                         _scrollToTopRequestId.value = ++nextScrollRequestId
@@ -313,6 +287,66 @@ class HomeViewModel(
                     loadConversations()
                 }
             }
+        }
+    }
+
+    private fun buildLoadResult(
+        providerConversations: List<SmsConversation>,
+        archivedThreadIds: Set<Long>,
+        pinnedIds: Set<Long>
+    ): LoadResult {
+        val conversations = providerConversations
+            .filterNot { conversation ->
+                conversation.threadId in archivedThreadIds ||
+                    blockedNumbersPreferences.isNumberBlocked(conversation.address)
+            }
+            .sortedWith(
+                compareByDescending<SmsConversation> { it.threadId in pinnedIds }
+                    .thenByDescending { it.date }
+            )
+        return LoadResult(conversations, pinnedIds)
+    }
+
+    private fun publishLoadResult(result: LoadResult) {
+        val previousRows = _conversations.value.associateBy { it.threadId }
+        val preservedPresentations = result.conversations.mapNotNull { conversation ->
+            val previous = previousRows[conversation.threadId]
+            _contactPresentations.value[conversation.threadId]
+                ?.takeIf { previous?.address == conversation.address }
+                ?.let { conversation.threadId to it }
+        }.toMap()
+
+        _conversations.value = result.conversations
+        _contactPresentations.value = preservedPresentations
+        _contactNames.value = preservedPresentations.mapValues { it.value.displayName }
+        _pinnedThreadIds.value = result.pinnedIds
+        applyCachedPresentations()
+        persistVisibleState()
+    }
+
+    private fun resolvePresentationsInBackground(
+        conversations: List<SmsConversation>,
+        generation: Long
+    ) {
+        presentationJob?.cancel()
+        presentationJob = viewModelScope.launch {
+            conversations.forEach { conversation ->
+                val presentation = withContext(Dispatchers.IO) {
+                    contactResolver.getCached(conversation.address)
+                        ?: contactResolver.resolve(conversation.address)
+                }
+                if (generation != loadGeneration) return@launch
+                val current = _conversations.value.firstOrNull {
+                    it.threadId == conversation.threadId
+                }
+                if (current?.address != conversation.address) return@forEach
+
+                _contactPresentations.value =
+                    _contactPresentations.value + (conversation.threadId to presentation)
+                _contactNames.value =
+                    _contactNames.value + (conversation.threadId to presentation.displayName)
+            }
+            if (generation == loadGeneration) persistVisibleState()
         }
     }
 
@@ -454,6 +488,7 @@ class HomeViewModel(
     companion object {
         private const val HOME_CACHE_NAME = "home_conversation_cache"
         private const val HOME_CACHE_KEY = "visible_home_state"
+        private const val INITIAL_PREVIEW_ROW_LIMIT = 250
 
         fun normalizeAddress(address: String): String =
             ContactPresentationResolver.cacheKey(address)

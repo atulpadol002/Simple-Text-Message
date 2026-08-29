@@ -40,7 +40,17 @@ class SmsRepository(
             firstDigits.takeLast(10) == secondDigits.takeLast(10)
     }
 
-    fun getConversations(): List<SmsConversation> {
+    fun getConversations(): List<SmsConversation> =
+        queryConversations(maxRows = null)
+
+    /**
+     * Returns a fast first snapshot from the newest SMS rows. Counts in this snapshot are
+     * intentionally provisional; [getConversations] replaces them after the full background scan.
+     */
+    fun getRecentConversations(maxRows: Int): List<SmsConversation> =
+        queryConversations(maxRows = maxRows.coerceAtLeast(1))
+
+    private fun queryConversations(maxRows: Int?): List<SmsConversation> {
 
         val latestConversationByThread =
             linkedMapOf<Long, SmsConversation>()
@@ -92,7 +102,9 @@ class SmsRepository(
                     Telephony.Sms.READ
                 )
 
-            while (cursor.moveToNext()) {
+            var scannedRows = 0
+            while ((maxRows == null || scannedRows < maxRows) && cursor.moveToNext()) {
+                scannedRows++
 
                 val threadId =
                     cursor.getLong(threadIdIndex)
